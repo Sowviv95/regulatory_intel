@@ -177,6 +177,69 @@ Replace state-based navigation with React Router, extract inline mock data into 
 
 ---
 
+### Sprint 2 -- Source Queue Functionality
+
+**Date:** 15 July 2026
+
+**Status:** Completed
+
+**Objective**
+Make the Source Queue a functional workflow with search, filters, sorting, row selection, bulk actions, source detail panel, and status transitions using the existing in-memory mock service layer.
+
+**Changes implemented**
+- Added text search across source title, publisher name, country, document type, and language
+- Added filter dropdowns for Country and Document Type with dynamic option lists
+- Added "All" status tab showing all sources regardless of status
+- Added sortable columns (Country, Discovered) with asc/desc toggle
+- Added row selection with checkboxes and select-all header checkbox
+- Added bulk actions: Process Selected, Mark Irrelevant (shown when rows are selected)
+- All action buttons are now functional: Process, Retry, Review, Mark Irrelevant, Restore, Details
+- Added source detail slide-over panel showing: metadata, processing status, stage, regulation count, review-required count, processing timestamps, failure message
+- Row click opens the detail panel; Review button navigates to /sources/:sourceId
+- Status transitions update in-memory store: New -> Processing -> Ready for Review; any -> Irrelevant; Irrelevant -> New (Restore)
+- Processing summary cards (Active Jobs, Ready for Review, Failures) are now computed from live data
+- Dashboard KPIs (Pending Review, New This Week) now derive from live source counts
+- Empty states distinguish between "no sources in this stage" and "no sources match your search"
+- Selection clears after bulk actions
+- Enhanced Source type with: title, regulationCount, reviewRequiredCount, startedAt, completedAt, failureMessage
+- Source service: added getFilteredSources(), getSourceCountsByStatus(), getUniqueCountries(), getUniqueDocTypes(), bulkUpdateStatus()
+
+**Files added**
+- (none)
+
+**Files modified**
+- src/types/index.ts (added title, regulationCount, reviewRequiredCount, timestamps, failureMessage to Source)
+- src/data/sources.ts (added new fields to all 12 source records)
+- src/services/sources.ts (added search, filter, sort, bulk actions, count helpers)
+- src/services/dashboard.ts (derives Pending Review and New This Week from live source data)
+- src/app/components/SourceQueue.tsx (rebuilt with full functionality)
+- src/app/components/Dashboard.tsx (call getDashboardData() per-render instead of module scope)
+- DEVELOPMENT_LOG.md (added Sprint 2 entry)
+
+**Validation performed**
+- `pnpm run build` -- succeeded, 1626 modules, 309 KB JS, 87 KB CSS
+- `git diff --check` -- no whitespace errors
+- Manual: search filters results, country/type dropdowns filter, tabs filter by status, sorting toggles, row selection works, bulk process moves to Processing, bulk irrelevant discards, Process/Retry/Review/Restore/Details buttons functional, detail panel opens on row click, dashboard KPIs update after source status changes
+
+**Decisions**
+- Source detail is a slide-over panel rather than a separate route (matches existing UI pattern)
+- Dashboard reads live source counts per render (no caching needed for PoC scale)
+- Sort applies after text/status/filter so all constraints compose
+- Bulk actions clear selection to prevent stale references
+- "All" tab added to complement per-status tabs
+
+**Known limitations**
+- Source queue state still resets on page reload (in-memory only)
+- Failure message field populated for no records in demo data (placeholder for Sprint 5+)
+- Sort by "discovered" compares string values (correct for "Jul DD, YYYY" format in demo data)
+- No pagination (12 records, no need yet)
+- Detail panel doesn't update in real-time if the same source is modified while panel is open
+
+**Next steps**
+- Sprint 3: Regulatory Review workflow (shared review state, field accept/flag/edit)
+
+---
+
 ## Sprint Tracking Template
 
 ### Sprint X – Sprint Name

@@ -62,6 +62,8 @@
 
 ## Sprint 2 -- Source Queue Functionality
 
+**Status:** Completed
+
 **Objective:** Make the Source Queue screen functional with the shared data layer.
 
 **Scope:**

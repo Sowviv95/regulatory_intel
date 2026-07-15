@@ -5,8 +5,6 @@ import { K, impactStyle, statusStyle } from './kiaa-tokens';
 import { Badge } from './KBadge';
 import { getDashboardData } from '../../services/dashboard';
 
-const dashboardData = getDashboardData();
-
 function FilterDropdown({ label, options }: { label: string; options: string[] }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState('All');
@@ -53,7 +51,7 @@ function FilterDropdown({ label, options }: { label: string; options: string[] }
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const { kpis, jurisdictions, alerts } = dashboardData;
+  const { kpis, jurisdictions, alerts } = getDashboardData();
 
   return (
     <div style={{ padding: '24px', background: K.pageBg, minHeight: '100vh', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>

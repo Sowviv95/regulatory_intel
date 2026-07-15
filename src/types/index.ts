@@ -76,11 +76,17 @@ export interface Source {
   flag: string;
   country: string;
   source: string;
+  title: string;
   language: string;
   docType: string;
   discovered: string;
   status: SourceStatus;
   stage: ProcessingStage;
+  regulationCount: number;
+  reviewRequiredCount: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  failureMessage: string | null;
 }
 
 // -- Regulation (single-document review) ------------------------------------
