@@ -1,32 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { TrendingUp, TrendingDown, Bell, Globe, ChevronDown, Filter, AlertTriangle, RefreshCw } from 'lucide-react';
-import { K, type Screen, impactStyle, statusStyle } from './kiaa-tokens';
+import { K, impactStyle, statusStyle } from './kiaa-tokens';
 import { Badge } from './KBadge';
+import { getDashboardData } from '../../services/dashboard';
 
-const kpis = [
-  { label: 'Total Regulations', value: '1,243', delta: '+4.2%', up: true, sub: 'Across 6 jurisdictions' },
-  { label: 'New This Week', value: '57', delta: '+12.5%', up: true, sub: 'vs. prior week' },
-  { label: 'High Impact', value: '84', delta: '+3 this week', up: false, sub: 'Require attention' },
-  { label: 'Pending Review', value: '239', delta: '−8 since yesterday', up: true, sub: 'In analyst queue' },
-];
-
-const jurisdictions = [
-  { country: 'Taiwan', flag: '🇹🇼', total: 187, covered: 142, pending: 18, high: 12 },
-  { country: 'Denmark', flag: '🇩🇰', total: 203, covered: 165, pending: 22, high: 8 },
-  { country: 'Finland', flag: '🇫🇮', total: 178, covered: 134, pending: 31, high: 15 },
-  { country: 'Poland', flag: '🇵🇱', total: 221, covered: 189, pending: 14, high: 9 },
-  { country: 'South Korea', flag: '🇰🇷', total: 256, covered: 208, pending: 27, high: 19 },
-  { country: 'Vietnam', flag: '🇻🇳', total: 198, covered: 152, pending: 33, high: 21 },
-];
-
-const alerts = [
-  { id: 1, flag: '🇹🇼', country: 'Taiwan', title: 'Tobacco Hazards Prevention Act Amendment 2026', date: 'Jul 14', impact: 'High', status: 'New' },
-  { id: 2, flag: '🇰🇷', country: 'South Korea', title: 'E-cigarette Content Disclosure Rules Update', date: 'Jul 13', impact: 'High', status: 'Processing' },
-  { id: 3, flag: '🇻🇳', country: 'Vietnam', title: 'Tobacco Control Law Phase 3 Implementation', date: 'Jul 12', impact: 'Medium', status: 'New' },
-  { id: 4, flag: '🇩🇰', country: 'Denmark', title: 'Nicotine Pouch Maximum Strength Regulation', date: 'Jul 11', impact: 'Medium', status: 'Ready for Review' },
-  { id: 5, flag: '🇫🇮', country: 'Finland', title: 'E-cigarette Display Restriction Amendment', date: 'Jul 10', impact: 'Low', status: 'Processing' },
-  { id: 6, flag: '🇵🇱', country: 'Poland', title: 'Heated Tobacco Product Labeling Requirements', date: 'Jul 9', impact: 'Medium', status: 'Ready for Review' },
-];
+const dashboardData = getDashboardData();
 
 function FilterDropdown({ label, options }: { label: string; options: string[] }) {
   const [open, setOpen] = useState(false);
@@ -72,7 +51,10 @@ function FilterDropdown({ label, options }: { label: string; options: string[] }
   );
 }
 
-export function Dashboard({ onNavigate }: { onNavigate: (s: Screen, item?: string) => void }) {
+export function Dashboard() {
+  const navigate = useNavigate();
+  const { kpis, jurisdictions, alerts } = dashboardData;
+
   return (
     <div style={{ padding: '24px', background: K.pageBg, minHeight: '100vh', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
       {/* Header */}
@@ -82,7 +64,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (s: Screen, item?: strin
             Regulatory Intelligence
           </h1>
           <p style={{ fontSize: '12px', color: K.textMuted, marginTop: '3px' }}>
-            Tobacco & Nicotine · Dashboard · Jul 15, 2026
+            Tobacco & Nicotine &middot; Dashboard &middot; Jul 15, 2026
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -181,9 +163,9 @@ export function Dashboard({ onNavigate }: { onNavigate: (s: Screen, item?: strin
               <h3 style={{ fontSize: '13px', fontWeight: 600, color: K.textPrimary, margin: 0 }}>Recent Alerts</h3>
             </div>
             <button
-              onClick={() => onNavigate('source-queue')}
+              onClick={() => navigate('/sources')}
               style={{ fontSize: '11px', color: K.accentText, fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
-            >View all →</button>
+            >View all &rarr;</button>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
@@ -193,7 +175,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (s: Screen, item?: strin
               return (
                 <div
                   key={a.id}
-                  onClick={() => onNavigate('regulation-review', String(a.id))}
+                  onClick={() => navigate(`/regulations/${a.id}`)}
                   style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '10px 11px', border: `1px solid ${K.borderSubtle}`, borderRadius: '7px', cursor: 'pointer', transition: 'background 0.12s, border-color 0.12s' }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = K.cardBgHover; (e.currentTarget as HTMLElement).style.borderColor = K.accentBorder; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.borderColor = K.borderSubtle; }}
@@ -202,7 +184,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (s: Screen, item?: strin
                     <span style={{ fontSize: '16px', lineHeight: 1.3 }}>{a.flag}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '12px', fontWeight: 500, color: K.textPrimary, lineHeight: 1.35, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</div>
-                      <div style={{ fontSize: '11px', color: K.textFaint, marginTop: '2px' }}>{a.country} · {a.date}</div>
+                      <div style={{ fontSize: '11px', color: K.textFaint, marginTop: '2px' }}>{a.country} &middot; {a.date}</div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', marginLeft: '10px', flexShrink: 0 }}>

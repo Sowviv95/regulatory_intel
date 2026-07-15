@@ -8,7 +8,7 @@ This document tracks the functional changes, architectural decisions, sprint out
 - Local folder: D:\Regulatory Intelligence
 - Frontend source: Figma Make export
 - Package manager: pnpm
-- Current phase: Figma UI baseline
+- Current phase: Sprint 1 — Routing and shared data layer
 
 ---
 
@@ -98,6 +98,82 @@ Audit the existing Figma-exported codebase, document the PoC requirements, archi
 
 **Next steps**
 - Sprint 1: Add React Router, extract mock data, create shared service layer
+
+---
+
+### Sprint 1 -- Routing and Shared Data Layer
+
+**Date:** 15 July 2026
+
+**Status:** Completed
+
+**Objective**
+Replace state-based navigation with React Router, extract inline mock data into domain-specific files, create shared TypeScript types and a service layer, and add minimal loading/empty/error/not-found states.
+
+**Changes implemented**
+- Replaced App.tsx state-based screen switching with React Router (BrowserRouter, Routes, Route)
+- Added 7 routes: /, /sources, /sources/:sourceId, /regulations, /regulations/:regulationId, /search, * (not found)
+- Updated TopNav to derive active state from current URL path via useLocation
+- Created shared TypeScript types in src/types/index.ts
+- Extracted all inline mock data from 4 components into src/data/ (dashboard.ts, sources.ts, regulations.ts, search.ts)
+- Created mock-backed service layer in src/services/ (dashboard.ts, sources.ts, regulations.ts, search.ts)
+- Source queue state now persists across navigations within the same session (in-memory mutable store in services/sources.ts)
+- Source selector in RegulationReviewTable updates URL when switching sources
+- Added NotFound component with 404 page and "Back to Dashboard" button
+- Added "Regulation not found" empty state in RegulationReview
+- Added "No sources available" empty state in RegulationReviewTable
+- All components now import data from services, not directly from data files
+
+**Files added**
+- src/types/index.ts
+- src/data/dashboard.ts
+- src/data/sources.ts
+- src/data/regulations.ts
+- src/data/search.ts
+- src/services/dashboard.ts
+- src/services/sources.ts
+- src/services/regulations.ts
+- src/services/search.ts
+- src/app/components/NotFound.tsx
+
+**Files modified**
+- src/app/App.tsx (router, removed state-based navigation)
+- src/app/components/TopNav.tsx (useLocation/useNavigate, removed Screen prop)
+- src/app/components/Dashboard.tsx (useNavigate, service imports)
+- src/app/components/SourceQueue.tsx (useNavigate, service imports, in-memory state)
+- src/app/components/RegulationReview.tsx (useParams, useNavigate, service imports, not-found state)
+- src/app/components/RegulationReviewTable.tsx (useParams, useNavigate, service imports, URL updates)
+- src/app/components/SearchExport.tsx (service imports)
+- DEVELOPMENT_LOG.md (added Sprint 1 entry)
+
+**Validation performed**
+- `pnpm run build` -- succeeded, 1625 modules, 296 KB JS, 85 KB CSS
+- `git diff --check` -- no whitespace errors (CRLF warnings only, Windows environment)
+- `git diff --stat` -- 7 modified files, net -246 lines (data extraction)
+- No changes to KIAA theme, design tokens, or visual layout
+
+**Decisions**
+- Source queue uses in-memory mutable array in service layer for session persistence
+- RegulationReviewTable updates URL via navigate(replace: true) when switching sources
+- TopNav active state uses pathname prefix matching (exact match for "/" only)
+- Screen type retained in kiaa-tokens.ts for backward compatibility
+- react-router already in package.json dependencies (no install needed)
+
+**Known limitations**
+- Only regulation ID 1 has detailed data for RegulationReview; other IDs show a clear error state
+- Source queue state resets on page reload (in-memory only)
+- Review field states (accept/flag) are local to the component, not persisted
+- LoadingState component exists but is not actively triggered (mock services return synchronously)
+- Browser hard-refresh on /sources/:id or /regulations/:id requires Vite SPA fallback (works in dev, needs server config for production)
+
+**Sprint 1 addendum — State components and gitignore (15 July 2026)**
+- Created reusable LoadingState, EmptyState, ErrorState components in src/app/components/StateViews.tsx
+- RegulationReview shows ErrorState with source ID for invalid regulation IDs
+- RegulationReviewTable shows ErrorState for invalid source IDs, EmptyState when no sources exist
+- Added .claude/ to .gitignore
+
+**Next steps**
+- Sprint 2: Source Queue functionality (persistent state, status transitions)
 
 ---
 

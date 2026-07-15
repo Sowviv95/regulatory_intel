@@ -1,0 +1,16 @@
+import type { Source } from '../types';
+
+export const sources: Source[] = [
+  { id: 1,  sourceId: 1, flag: '\u{1F1F9}\u{1F1FC}', country: 'Taiwan',      source: 'Health Promotion Administration', language: 'ZH-TW', docType: 'Legislative Amendment',   discovered: 'Jul 14, 2026', status: 'New',             stage: 'Awaiting Extraction' },
+  { id: 2,  sourceId: 2, flag: '\u{1F1F0}\u{1F1F7}', country: 'South Korea', source: 'Ministry of Health and Welfare',  language: 'KO',    docType: 'Regulatory Notice',         discovered: 'Jul 13, 2026', status: 'Processing',      stage: 'AI Extraction'       },
+  { id: 3,  sourceId: 4, flag: '\u{1F1FB}\u{1F1F3}', country: 'Vietnam',     source: 'Vietnam Tobacco Control Fund',    language: 'VI',    docType: 'Implementation Decree',     discovered: 'Jul 12, 2026', status: 'New',             stage: 'Awaiting Extraction' },
+  { id: 4,  sourceId: 3, flag: '\u{1F1E9}\u{1F1F0}', country: 'Denmark',     source: 'Danish Medicines Agency',         language: 'DA',    docType: 'Regulatory Guidance',       discovered: 'Jul 11, 2026', status: 'Ready for Review', stage: 'Analyst Review'      },
+  { id: 5,  sourceId: 5, flag: '\u{1F1EB}\u{1F1EE}', country: 'Finland',     source: 'Finnish Institute for Health',    language: 'FI',    docType: 'Amendment Proposal',        discovered: 'Jul 10, 2026', status: 'Processing',      stage: 'Translating'         },
+  { id: 6,  sourceId: 6, flag: '\u{1F1F5}\u{1F1F1}', country: 'Poland',      source: 'Chief Sanitary Inspectorate',     language: 'PL',    docType: 'Technical Standard',        discovered: 'Jul 9, 2026',  status: 'Ready for Review', stage: 'Analyst Review'      },
+  { id: 7,  sourceId: 1, flag: '\u{1F1F9}\u{1F1FC}', country: 'Taiwan',      source: 'Food and Drug Administration',    language: 'ZH-TW', docType: 'Product Registration',      discovered: 'Jul 8, 2026',  status: 'Irrelevant',      stage: 'Discarded'           },
+  { id: 8,  sourceId: 2, flag: '\u{1F1F0}\u{1F1F7}', country: 'South Korea', source: 'Korea Customs Service',           language: 'KO',    docType: 'Import Restriction Notice', discovered: 'Jul 7, 2026',  status: 'Processing',      stage: 'Quality Check'       },
+  { id: 9,  sourceId: 4, flag: '\u{1F1FB}\u{1F1F3}', country: 'Vietnam',     source: 'Ministry of Health',              language: 'VI',    docType: 'Ministerial Circular',      discovered: 'Jul 6, 2026',  status: 'New',             stage: 'Awaiting Extraction' },
+  { id: 10, sourceId: 3, flag: '\u{1F1E9}\u{1F1F0}', country: 'Denmark',     source: 'Danish Health Authority',         language: 'DA',    docType: 'Public Consultation',       discovered: 'Jul 5, 2026',  status: 'Ready for Review', stage: 'Analyst Review'      },
+  { id: 11, sourceId: 6, flag: '\u{1F1F5}\u{1F1F1}', country: 'Poland',      source: 'Office for Registration of MP',  language: 'PL',    docType: 'Regulatory Update',         discovered: 'Jul 4, 2026',  status: 'Processing',      stage: 'AI Extraction'       },
+  { id: 12, sourceId: 5, flag: '\u{1F1EB}\u{1F1EE}', country: 'Finland',     source: 'Valvira \u2013 National Supervisory', language: 'FI',    docType: 'Enforcement Notice',        discovered: 'Jul 3, 2026',  status: 'New',             stage: 'Awaiting Extraction' },
+];

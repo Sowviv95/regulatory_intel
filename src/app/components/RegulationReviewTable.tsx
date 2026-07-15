@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useParams, useNavigate } from 'react-router';
 import { Check, Flag, Edit2, ChevronLeft, ChevronRight, ChevronDown, Send, RotateCcw, Search, X } from 'lucide-react';
 import { K } from './kiaa-tokens';
+import { EmptyState, ErrorState } from './StateViews';
+import { getReviewSources, getReviewSourceById, buildFieldRows } from '../../services/regulations';
+import type { ReviewSource, FieldStatus } from '../../types';
 
-type FieldStatus = 'Pending' | 'Accepted' | 'Flagged';
-
-interface FieldRow {
+interface FieldRowWithStatus {
   id: number;
   category: string;
   field: string;
@@ -13,152 +15,6 @@ interface FieldRow {
   confidence: number;
   status: FieldStatus;
 }
-
-interface Source {
-  id: number;
-  flag: string;
-  country: string;
-  title: string;
-  sourceName: string;
-  docType: string;
-  date: string;
-  fields: Omit<FieldRow, 'status'>[];
-}
-
-const sources: Source[] = [
-  {
-    id: 1,
-    flag: '🇹🇼', country: 'Taiwan',
-    title: 'Tobacco Hazards Prevention Act — Amendment 2026',
-    sourceName: 'Health Promotion Administration, MOHW',
-    docType: 'Legislative Amendment', date: 'Jul 14, 2026',
-    fields: [
-      { id: 1,  category: 'Metadata',   field: 'Jurisdiction',      value: 'Taiwan',                                                    evidence: '衛生福利部健康促進署 — Ministry of Health and Welfare, Taiwan',                       confidence: 99 },
-      { id: 2,  category: 'Metadata',   field: 'Source Name',       value: 'Health Promotion Administration, MOHW',                     evidence: '衛生福利部健康促進署公告 — Health Promotion Administration announcement',           confidence: 97 },
-      { id: 3,  category: 'Metadata',   field: 'Source Type',       value: 'Legislative Amendment',                                     evidence: '預告「菸害防制法」修正草案 — Amendment draft of the Tobacco Hazards Prevention Act', confidence: 96 },
-      { id: 4,  category: 'Metadata',   field: 'Proposer',          value: 'Ministry of Health and Welfare',                            evidence: '衛生福利部部長 薛xx — Minister of Health and Welfare',                              confidence: 98 },
-      { id: 5,  category: 'Content',    field: 'Title',             value: 'Tobacco Hazards Prevention Act Amendment 2026',              evidence: '菸害防制法修正草案 — Draft amendment to the Tobacco Hazards Prevention Act',        confidence: 95 },
-      { id: 6,  category: 'Content',    field: 'Summary',           value: 'Introduces mandatory ENDS registration, ≥50% warning label coverage, flavour restrictions, and online retail ban with increased penalties.', evidence: '本次修正草案係依據WHO FCTC第9、10條之相關建議，針對電子煙及加熱菸草產品之管理規範進行全面檢討與修正。', confidence: 87 },
-      { id: 7,  category: 'Content',    field: 'Products Impacted', value: 'E-cigarettes, Heated Tobacco Products, Nicotine Pouches',   evidence: '所有電子煙裝置（含煙彈、煙液）及加熱菸草產品，須於本法施行日起六個月內完成登記。',         confidence: 91 },
-      { id: 8,  category: 'Assessment', field: 'Sector Impact',     value: 'High',                                                      evidence: '違反本法規定者，處新台幣二十萬元以上二百萬元以下罰鍰；情節重大者得廢止其營業執照。',       confidence: 82 },
-      { id: 9,  category: 'Assessment', field: 'Likelihood',        value: 'Confirmed',                                                 evidence: '本修正案預計於中華民國116年1月1日（西元2027年1月1日）起正式施行。',                     confidence: 78 },
-      { id: 10, category: 'Assessment', field: 'Status',            value: 'Ready for Review',                                          evidence: 'Draft published for public consultation period.',                                   confidence: 85 },
-      { id: 11, category: 'Dates',      field: 'Notice Date',       value: 'Jul 14, 2026',                                              evidence: '民國115年7月14日 — Republic of China year 115, July 14',                           confidence: 99 },
-      { id: 12, category: 'Dates',      field: 'Comment Deadline',  value: 'Sep 30, 2026',                                              evidence: '公告期間自民國115年7月14日起至115年9月30日止。',                                     confidence: 88 },
-      { id: 13, category: 'Dates',      field: 'Effective Date',    value: 'Jan 1, 2027',                                               evidence: '本修正案預計於中華民國116年1月1日（西元2027年1月1日）起正式施行。',                     confidence: 94 },
-    ],
-  },
-  {
-    id: 2,
-    flag: '🇰🇷', country: 'South Korea',
-    title: 'Electronic Cigarette Content Disclosure Rules Update',
-    sourceName: 'Ministry of Health and Welfare',
-    docType: 'Regulatory Notice', date: 'Jul 13, 2026',
-    fields: [
-      { id: 1,  category: 'Metadata',   field: 'Jurisdiction',      value: 'South Korea',                                               evidence: '보건복지부 — Ministry of Health and Welfare, Republic of Korea',                    confidence: 99 },
-      { id: 2,  category: 'Metadata',   field: 'Source Name',       value: 'Ministry of Health and Welfare',                            evidence: '보건복지부 고시 제2026-142호 — MOHW Notice No. 2026-142',                           confidence: 96 },
-      { id: 3,  category: 'Metadata',   field: 'Source Type',       value: 'Regulatory Notice',                                         evidence: '전자담배 성분 공개 규정 개정안 — Amendment to e-cigarette content disclosure rules',   confidence: 94 },
-      { id: 4,  category: 'Metadata',   field: 'Proposer',          value: 'Korea Disease Control and Prevention Agency',               evidence: '질병관리청장 — Director of KDCA',                                                    confidence: 91 },
-      { id: 5,  category: 'Content',    field: 'Title',             value: 'Electronic Cigarette Content Disclosure Rules 2026',        evidence: '전자담배 성분 공개에 관한 규정 — Regulation on disclosure of e-cigarette contents',  confidence: 93 },
-      { id: 6,  category: 'Content',    field: 'Summary',           value: 'Mandates quarterly reporting of all chemical constituents in e-liquids and aerosols; expands ingredient database requirements.', evidence: '전자담배 제조사 및 수입업자는 분기별로 전자담배 성분을 식품의약품안전처에 보고하여야 한다.', confidence: 84 },
-      { id: 7,  category: 'Content',    field: 'Products Impacted', value: 'E-cigarettes, E-liquids',                                   evidence: '전자담배 및 전자담배 액상 — Electronic cigarettes and e-liquids',                     confidence: 97 },
-      { id: 8,  category: 'Assessment', field: 'Sector Impact',     value: 'High',                                                      evidence: '위반 시 최대 500만원 과태료 부과 — Fine up to KRW 5 million for violation',           confidence: 88 },
-      { id: 9,  category: 'Assessment', field: 'Likelihood',        value: 'Confirmed',                                                 evidence: '시행일: 2026년 10월 1일 — Enforcement date: October 1, 2026',                       confidence: 95 },
-      { id: 10, category: 'Assessment', field: 'Status',            value: 'Processing',                                                evidence: 'Currently under inter-ministerial review before final issuance.',                    confidence: 79 },
-      { id: 11, category: 'Dates',      field: 'Notice Date',       value: 'Jul 13, 2026',                                              evidence: '공고일: 2026년 7월 13일 — Announcement date: July 13, 2026',                        confidence: 99 },
-      { id: 12, category: 'Dates',      field: 'Comment Deadline',  value: 'Aug 27, 2026',                                              evidence: '의견제출 기한: 2026년 8월 27일 — Deadline for comments: August 27, 2026',            confidence: 97 },
-      { id: 13, category: 'Dates',      field: 'Effective Date',    value: 'Oct 1, 2026',                                               evidence: '시행일: 2026년 10월 1일 — Effective date: October 1, 2026',                         confidence: 95 },
-    ],
-  },
-  {
-    id: 3,
-    flag: '🇩🇰', country: 'Denmark',
-    title: 'Nicotine Pouch Maximum Strength Regulation',
-    sourceName: 'Danish Medicines Agency',
-    docType: 'Regulatory Guidance', date: 'Jul 11, 2026',
-    fields: [
-      { id: 1,  category: 'Metadata',   field: 'Jurisdiction',      value: 'Denmark',                                                   evidence: 'Lægemiddelstyrelsen — Danish Medicines Agency',                                     confidence: 99 },
-      { id: 2,  category: 'Metadata',   field: 'Source Name',       value: 'Danish Medicines Agency (Lægemiddelstyrelsen)',             evidence: 'Vejledning om nikotinposer — Guidance on nicotine pouches',                         confidence: 97 },
-      { id: 3,  category: 'Metadata',   field: 'Source Type',       value: 'Regulatory Guidance',                                       evidence: 'Regulatorisk vejledning nr. 2026/44 — Regulatory guidance no. 2026/44',             confidence: 93 },
-      { id: 4,  category: 'Metadata',   field: 'Proposer',          value: 'Danish Medicines Agency',                                   evidence: 'Udstedt af Lægemiddelstyrelsen — Issued by the Danish Medicines Agency',             confidence: 98 },
-      { id: 5,  category: 'Content',    field: 'Title',             value: 'Nicotine Pouch Maximum Strength Regulation 2026',           evidence: 'Regulering af maksimal nikotinstyrke i nikotinposer',                               confidence: 94 },
-      { id: 6,  category: 'Content',    field: 'Summary',           value: 'Caps nicotine concentration in pouches at 20 mg/g; prohibits sale to under-18s via any channel; requires child-resistant packaging.', evidence: 'Maksimal nikotinindhold i nikotinposer fastsættes til 20 mg/g. Salg til personer under 18 år forbydes i alle kanaler.', confidence: 89 },
-      { id: 7,  category: 'Content',    field: 'Products Impacted', value: 'Nicotine Pouches',                                          evidence: 'Nikotinposer — alle varianter og styrker — Nicotine pouches, all variants',          confidence: 99 },
-      { id: 8,  category: 'Assessment', field: 'Sector Impact',     value: 'Medium',                                                    evidence: 'Bøde op til DKK 50.000 for overtrædelse — Fine up to DKK 50,000 for violation',      confidence: 81 },
-      { id: 9,  category: 'Assessment', field: 'Likelihood',        value: 'Probable',                                                  evidence: 'Forventet ikrafttræden: 1. januar 2027 — Expected entry into force: January 1, 2027', confidence: 76 },
-      { id: 10, category: 'Assessment', field: 'Status',            value: 'Ready for Review',                                          evidence: 'Høringsfrist udløbet — Public consultation period closed',                           confidence: 83 },
-      { id: 11, category: 'Dates',      field: 'Notice Date',       value: 'Jul 11, 2026',                                              evidence: 'Offentliggjort den 11. juli 2026 — Published July 11, 2026',                         confidence: 99 },
-      { id: 12, category: 'Dates',      field: 'Comment Deadline',  value: 'Aug 15, 2026',                                              evidence: 'Høringsfrist: 15. august 2026 — Consultation deadline: August 15, 2026',             confidence: 96 },
-      { id: 13, category: 'Dates',      field: 'Effective Date',    value: 'Jan 1, 2027',                                               evidence: 'Ikrafttræden: 1. januar 2027 — Entry into force: January 1, 2027',                   confidence: 90 },
-    ],
-  },
-  {
-    id: 4,
-    flag: '🇻🇳', country: 'Vietnam',
-    title: 'Tobacco Control Law Phase 3 Implementation Decree',
-    sourceName: 'Vietnam Tobacco Control Fund',
-    docType: 'Implementation Decree', date: 'Jul 12, 2026',
-    fields: [
-      { id: 1,  category: 'Metadata',   field: 'Jurisdiction',      value: 'Vietnam',                                                   evidence: 'Quỹ Phòng chống tác hại của thuốc lá — Vietnam Tobacco Control Fund',               confidence: 98 },
-      { id: 2,  category: 'Metadata',   field: 'Source Name',       value: 'Vietnam Tobacco Control Fund',                              evidence: 'Nghị định của Chính phủ — Government decree',                                       confidence: 95 },
-      { id: 3,  category: 'Metadata',   field: 'Source Type',       value: 'Implementation Decree',                                     evidence: 'Nghị định số 77/2026/NĐ-CP — Decree No. 77/2026/ND-CP',                            confidence: 97 },
-      { id: 4,  category: 'Metadata',   field: 'Proposer',          value: 'Ministry of Health Vietnam',                               evidence: 'Bộ Y tế đề xuất — Proposed by the Ministry of Health',                              confidence: 94 },
-      { id: 5,  category: 'Content',    field: 'Title',             value: 'Tobacco Control Law Phase 3 Implementation Decree',         evidence: 'Hướng dẫn thi hành Luật Phòng chống tác hại của thuốc lá Giai đoạn 3',            confidence: 92 },
-      { id: 6,  category: 'Content',    field: 'Summary',           value: 'Phase 3 extends graphic health warnings to 75% of packaging, bans tobacco advertising in all digital media, and introduces plain packaging pilot for 3 provinces.', evidence: 'Giai đoạn 3 mở rộng cảnh báo sức khỏe đồ họa lên 75% bao bì, cấm quảng cáo thuốc lá trên tất cả phương tiện kỹ thuật số.', confidence: 83 },
-      { id: 7,  category: 'Content',    field: 'Products Impacted', value: 'Cigarettes, Heated Tobacco Products',                       evidence: 'Thuốc lá điếu và sản phẩm thuốc lá nung nóng — Cigarettes and heated tobacco products', confidence: 93 },
-      { id: 8,  category: 'Assessment', field: 'Sector Impact',     value: 'High',                                                      evidence: 'Phạt tiền từ 20 đến 100 triệu đồng — Fines from VND 20–100 million',               confidence: 86 },
-      { id: 9,  category: 'Assessment', field: 'Likelihood',        value: 'Confirmed',                                                 evidence: 'Nghị định có hiệu lực từ ngày 01/01/2027 — Decree effective from January 1, 2027',  confidence: 91 },
-      { id: 10, category: 'Assessment', field: 'Status',            value: 'New',                                                       evidence: 'Mới ban hành — Newly issued',                                                       confidence: 80 },
-      { id: 11, category: 'Dates',      field: 'Notice Date',       value: 'Jul 12, 2026',                                              evidence: 'Ngày ban hành: 12/07/2026 — Date of issue: July 12, 2026',                          confidence: 99 },
-      { id: 12, category: 'Dates',      field: 'Comment Deadline',  value: 'N/A',                                                       evidence: 'Không có giai đoạn lấy ý kiến — No public consultation phase',                     confidence: 72 },
-      { id: 13, category: 'Dates',      field: 'Effective Date',    value: 'Jan 1, 2027',                                               evidence: 'Hiệu lực thi hành từ ngày 01/01/2027 — Effective from January 1, 2027',             confidence: 93 },
-    ],
-  },
-  {
-    id: 5,
-    flag: '🇫🇮', country: 'Finland',
-    title: 'E-cigarette Point-of-Sale Display Restrictions',
-    sourceName: 'Finnish Institute for Health and Welfare',
-    docType: 'Amendment Proposal', date: 'Jul 10, 2026',
-    fields: [
-      { id: 1,  category: 'Metadata',   field: 'Jurisdiction',      value: 'Finland',                                                   evidence: 'Terveyden ja hyvinvoinnin laitos (THL) — Finnish Institute for Health and Welfare',  confidence: 99 },
-      { id: 2,  category: 'Metadata',   field: 'Source Name',       value: 'Finnish Institute for Health and Welfare (THL)',            evidence: 'THL:n lausunto — THL statement',                                                     confidence: 96 },
-      { id: 3,  category: 'Metadata',   field: 'Source Type',       value: 'Amendment Proposal',                                        evidence: 'Lakimuutosehdotus — Legislative amendment proposal',                                confidence: 94 },
-      { id: 4,  category: 'Metadata',   field: 'Proposer',          value: 'Ministry of Social Affairs and Health Finland',            evidence: 'Sosiaali- ja terveysministeriö — Ministry of Social Affairs and Health',             confidence: 97 },
-      { id: 5,  category: 'Content',    field: 'Title',             value: 'E-cigarette Point-of-Sale Display Restrictions 2026',       evidence: 'Sähkösavukkeiden myyntipisteessä esittämisen rajoitukset',                          confidence: 91 },
-      { id: 6,  category: 'Content',    field: 'Summary',           value: 'Proposes complete removal of e-cigarette displays from all retail point-of-sale locations, aligned with existing cigarette display ban.', evidence: 'Sähkösavukkeet ehdotetaan täysin poistettavaksi myyntipisteistä, yhdenmukaisesti savukkeiden näyttökiellon kanssa.', confidence: 86 },
-      { id: 7,  category: 'Content',    field: 'Products Impacted', value: 'E-cigarettes',                                              evidence: 'Sähkösavukkeet ja täyttöpakkaukset — E-cigarettes and refill packs',                confidence: 95 },
-      { id: 8,  category: 'Assessment', field: 'Sector Impact',     value: 'Low',                                                       evidence: 'Rikkomusmaksu enintään 5 000 euroa — Infringement fine up to €5,000',              confidence: 79 },
-      { id: 9,  category: 'Assessment', field: 'Likelihood',        value: 'Likely',                                                    evidence: 'Hallituksen esitys — Government bill expected Q4 2026',                             confidence: 74 },
-      { id: 10, category: 'Assessment', field: 'Status',            value: 'Processing',                                                evidence: 'Lausuntokierroksella — Currently in consultation round',                            confidence: 82 },
-      { id: 11, category: 'Dates',      field: 'Notice Date',       value: 'Jul 10, 2026',                                              evidence: 'Julkaistu 10. heinäkuuta 2026 — Published July 10, 2026',                          confidence: 99 },
-      { id: 12, category: 'Dates',      field: 'Comment Deadline',  value: 'Sep 5, 2026',                                               evidence: 'Lausuntopyyntö päättyy 5.9.2026 — Comment request closes September 5, 2026',       confidence: 94 },
-      { id: 13, category: 'Dates',      field: 'Effective Date',    value: 'TBD',                                                       evidence: 'Voimaantulopäivä vahvistetaan myöhemmin — Effective date to be confirmed',         confidence: 61 },
-    ],
-  },
-  {
-    id: 6,
-    flag: '🇵🇱', country: 'Poland',
-    title: 'Heated Tobacco Product Labeling Requirements',
-    sourceName: 'Chief Sanitary Inspectorate',
-    docType: 'Technical Standard', date: 'Jul 9, 2026',
-    fields: [
-      { id: 1,  category: 'Metadata',   field: 'Jurisdiction',      value: 'Poland',                                                    evidence: 'Główny Inspektorat Sanitarny — Chief Sanitary Inspectorate, Poland',               confidence: 99 },
-      { id: 2,  category: 'Metadata',   field: 'Source Name',       value: 'Chief Sanitary Inspectorate (GIS)',                         evidence: 'GIS komunikat nr 2026/38 — GIS Communiqué No. 2026/38',                            confidence: 97 },
-      { id: 3,  category: 'Metadata',   field: 'Source Type',       value: 'Technical Standard',                                        evidence: 'Norma techniczna — Technical standard (PN-EN compliance)',                          confidence: 92 },
-      { id: 4,  category: 'Metadata',   field: 'Proposer',          value: 'Ministry of Health Poland',                                 evidence: 'Ministerstwo Zdrowia — Ministry of Health, Poland',                                 confidence: 96 },
-      { id: 5,  category: 'Content',    field: 'Title',             value: 'Heated Tobacco Product Labeling Requirements 2026',         evidence: 'Wymagania dotyczące oznakowania podgrzewanych wyrobów tytoniowych',               confidence: 93 },
-      { id: 6,  category: 'Content',    field: 'Summary',           value: 'Specifies mandatory labeling for HTP packaging including emission data, health warnings in Polish, and QR-code traceability links.', evidence: 'Oznakowanie musi zawierać dane dotyczące emisji, ostrzeżenia zdrowotne w języku polskim oraz kody QR umożliwiające identyfikowalność.', confidence: 88 },
-      { id: 7,  category: 'Content',    field: 'Products Impacted', value: 'Heated Tobacco Products',                                   evidence: 'Podgrzewane wyroby tytoniowe — wszystkie kategorie — Heated tobacco products, all categories', confidence: 98 },
-      { id: 8,  category: 'Assessment', field: 'Sector Impact',     value: 'Medium',                                                    evidence: 'Kara pieniężna do 200 000 PLN — Financial penalty up to PLN 200,000',              confidence: 84 },
-      { id: 9,  category: 'Assessment', field: 'Likelihood',        value: 'Probable',                                                  evidence: 'Wejście w życie: 1 marca 2027 — Entry into force: March 1, 2027',                  confidence: 80 },
-      { id: 10, category: 'Assessment', field: 'Status',            value: 'Ready for Review',                                          evidence: 'Projekt zakończył fazę konsultacji — Consultation phase completed',               confidence: 86 },
-      { id: 11, category: 'Dates',      field: 'Notice Date',       value: 'Jul 9, 2026',                                               evidence: 'Data publikacji: 9 lipca 2026 — Publication date: July 9, 2026',                  confidence: 99 },
-      { id: 12, category: 'Dates',      field: 'Comment Deadline',  value: 'Aug 9, 2026',                                               evidence: 'Termin składania uwag: 9 sierpnia 2026 — Deadline for comments: August 9, 2026',  confidence: 95 },
-      { id: 13, category: 'Dates',      field: 'Effective Date',    value: 'Mar 1, 2027',                                               evidence: 'Wejście w życie: 1 marca 2027 — Effective date: March 1, 2027',                   confidence: 91 },
-    ],
-  },
-];
 
 const categories = ['All', 'Metadata', 'Content', 'Assessment', 'Dates'];
 const statuses = ['All Statuses', 'Pending', 'Accepted', 'Flagged'];
@@ -220,10 +76,11 @@ function FilterSelect({ value, options, onChange }: { value: string; options: st
   );
 }
 
-function SourceSearch({ selected, onSelect }: { selected: Source; onSelect: (s: Source) => void }) {
+function SourceSearch({ selected, onSelect }: { selected: ReviewSource; onSelect: (s: ReviewSource) => void }) {
   const [open, setOpen]   = useState(false);
   const [query, setQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const allSources = getReviewSources();
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -233,7 +90,7 @@ function SourceSearch({ selected, onSelect }: { selected: Source; onSelect: (s: 
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const matches = sources.filter(s =>
+  const matches = allSources.filter(s =>
     !query ||
     s.title.toLowerCase().includes(query.toLowerCase()) ||
     s.country.toLowerCase().includes(query.toLowerCase()) ||
@@ -257,7 +114,7 @@ function SourceSearch({ selected, onSelect }: { selected: Source; onSelect: (s: 
         <span style={{ fontSize: '18px', flexShrink: 0 }}>{selected.flag}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '13px', fontWeight: 600, color: K.textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected.title}</div>
-          <div style={{ fontSize: '11px', color: K.textMuted }}>{selected.sourceName} · {selected.docType} · {selected.date}</div>
+          <div style={{ fontSize: '11px', color: K.textMuted }}>{selected.sourceName} &middot; {selected.docType} &middot; {selected.date}</div>
         </div>
         <ChevronDown size={14} style={{ color: K.textFaint, flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
       </button>
@@ -276,7 +133,7 @@ function SourceSearch({ selected, onSelect }: { selected: Source; onSelect: (s: 
               autoFocus
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Search by title, country, source or type…"
+              placeholder="Search by title, country, source or type\u2026"
               style={{ flex: 1, border: 'none', outline: 'none', fontSize: '13px', color: K.textPrimary, fontFamily: 'inherit', background: 'transparent' }}
             />
             {query && (
@@ -310,7 +167,7 @@ function SourceSearch({ selected, onSelect }: { selected: Source; onSelect: (s: 
                     <span style={{ fontSize: '18px', flexShrink: 0, lineHeight: 1.3 }}>{s.flag}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '12px', fontWeight: isActive ? 600 : 500, color: isActive ? K.accentText : K.textPrimary, lineHeight: 1.35 }}>{s.title}</div>
-                      <div style={{ fontSize: '11px', color: K.textMuted, marginTop: '2px' }}>{s.country} · {s.docType} · {s.date}</div>
+                      <div style={{ fontSize: '11px', color: K.textMuted, marginTop: '2px' }}>{s.country} &middot; {s.docType} &middot; {s.date}</div>
                       <div style={{ fontSize: '11px', color: K.textFaint }}>{s.sourceName}</div>
                     </div>
                     {isActive && <Check size={13} style={{ color: K.accent, flexShrink: 0, marginTop: '2px' }} />}
@@ -321,7 +178,7 @@ function SourceSearch({ selected, onSelect }: { selected: Source; onSelect: (s: 
           </div>
 
           <div style={{ padding: '8px 14px', borderTop: `1px solid ${K.border}`, background: '#fafafa' }}>
-            <span style={{ fontSize: '11px', color: K.textFaint }}>{matches.length} of {sources.length} sources</span>
+            <span style={{ fontSize: '11px', color: K.textFaint }}>{matches.length} of {allSources.length} sources</span>
           </div>
         </div>
       )}
@@ -329,50 +186,68 @@ function SourceSearch({ selected, onSelect }: { selected: Source; onSelect: (s: 
   );
 }
 
-function buildRows(source: Source): FieldRow[] {
-  return source.fields.map(f => ({ ...f, status: 'Pending' as FieldStatus }));
-}
+export function RegulationReviewTable() {
+  const { sourceId: paramSourceId } = useParams<{ sourceId: string }>();
+  const navigate = useNavigate();
+  const allSources = getReviewSources();
+  const initialSourceId = paramSourceId ? Number(paramSourceId) : undefined;
 
-export function RegulationReviewTable({ initialSourceId }: { initialSourceId?: number }) {
-  const startSource = initialSourceId
-    ? (sources.find(s => s.id === initialSourceId) ?? sources[0])
-    : sources[0];
+  const resolvedSource = initialSourceId
+    ? getReviewSourceById(initialSourceId)
+    : allSources[0];
 
-  const [selectedSource, setSelectedSource] = useState<Source>(startSource);
-  const [fields, setFields]                 = useState<FieldRow[]>(() => buildRows(startSource));
+  // Show error when a specific source ID was requested but not found
+  if (initialSourceId && !resolvedSource) {
+    return (
+      <div style={{ minHeight: 'calc(100vh - 52px)', background: K.pageBg }}>
+        <ErrorState
+          title="Source not found"
+          message={`No source with ID ${paramSourceId} exists.`}
+          onRetry={() => navigate('/sources')}
+        />
+      </div>
+    );
+  }
+
+  const startSource = resolvedSource ?? allSources[0];
+
+  const [selectedSource, setSelectedSource] = useState<ReviewSource>(startSource);
+  const [fields, setFields]                 = useState<FieldRowWithStatus[]>(() => buildFieldRows(startSource));
   const [catFilter, setCatFilter]           = useState('All');
   const [statusFilter, setStatusFilter]     = useState('All Statuses');
 
   useLayoutEffect(() => {
     if (!initialSourceId) return;
-    const match = sources.find(s => s.id === initialSourceId);
+    const match = getReviewSourceById(initialSourceId);
     if (match && match.id !== selectedSource.id) {
       setSelectedSource(match);
-      setFields(buildRows(match));
+      setFields(buildFieldRows(match));
       setCatFilter('All');
       setStatusFilter('All Statuses');
     }
   }, [initialSourceId]);
+
   const [editingId, setEditingId]           = useState<number | null>(null);
   const [editValue, setEditValue]           = useState('');
 
-  const handleSelectSource = (s: Source) => {
+  const handleSelectSource = (s: ReviewSource) => {
     setSelectedSource(s);
-    setFields(buildRows(s));
+    setFields(buildFieldRows(s));
     setCatFilter('All');
     setStatusFilter('All Statuses');
     setEditingId(null);
+    navigate(`/sources/${s.id}`, { replace: true });
   };
 
-  const currentIdx = sources.findIndex(s => s.id === selectedSource.id);
-  const goTo = (idx: number) => { if (idx >= 0 && idx < sources.length) handleSelectSource(sources[idx]); };
+  const currentIdx = allSources.findIndex(s => s.id === selectedSource.id);
+  const goTo = (idx: number) => { if (idx >= 0 && idx < allSources.length) handleSelectSource(allSources[idx]); };
 
   const accept    = (id: number) => setFields(f => f.map(r => r.id === id ? { ...r, status: 'Accepted' } : r));
   const flag      = (id: number) => setFields(f => f.map(r => r.id === id ? { ...r, status: 'Flagged'  } : r));
   const reset     = (id: number) => setFields(f => f.map(r => r.id === id ? { ...r, status: 'Pending'  } : r));
   const acceptAll = ()           => setFields(f => f.map(r => ({ ...r, status: 'Accepted' })));
 
-  const startEdit = (row: FieldRow) => { setEditingId(row.id); setEditValue(row.value); };
+  const startEdit = (row: FieldRowWithStatus) => { setEditingId(row.id); setEditValue(row.value); };
   const saveEdit  = (id: number)    => { setFields(f => f.map(r => r.id === id ? { ...r, value: editValue, status: 'Accepted' } : r)); setEditingId(null); };
 
   const visible = fields.filter(r => {
@@ -385,6 +260,14 @@ export function RegulationReviewTable({ initialSourceId }: { initialSourceId?: n
   const accepted = fields.filter(r => r.status === 'Accepted').length;
   const flagged  = fields.filter(r => r.status === 'Flagged').length;
   const rate     = total > 0 ? Math.round((accepted / total) * 100) : 0;
+
+  if (allSources.length === 0) {
+    return (
+      <div style={{ minHeight: 'calc(100vh - 52px)', background: K.pageBg }}>
+        <EmptyState title="No sources available" message="There are no sources ready for review yet." />
+      </div>
+    );
+  }
 
   const thStyle: React.CSSProperties = {
     padding: '9px 14px', fontSize: '11px', fontWeight: 600, color: K.textMuted,
@@ -411,10 +294,10 @@ export function RegulationReviewTable({ initialSourceId }: { initialSourceId?: n
             <SourceSearch selected={selectedSource} onSelect={handleSelectSource} />
           </div>
           <button
-            onClick={() => goTo(currentIdx + 1)} disabled={currentIdx === sources.length - 1}
-            style={{ padding: '7px 10px', borderRadius: '6px', border: `1px solid ${K.border}`, background: '#fff', color: currentIdx === sources.length - 1 ? K.textFaint : K.textSecondary, cursor: currentIdx === sources.length - 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', flexShrink: 0, fontFamily: 'inherit' }}
+            onClick={() => goTo(currentIdx + 1)} disabled={currentIdx === allSources.length - 1}
+            style={{ padding: '7px 10px', borderRadius: '6px', border: `1px solid ${K.border}`, background: '#fff', color: currentIdx === allSources.length - 1 ? K.textFaint : K.textSecondary, cursor: currentIdx === allSources.length - 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', flexShrink: 0, fontFamily: 'inherit' }}
           ><ChevronRight size={14} /></button>
-          <span style={{ fontSize: '11px', color: K.textFaint, flexShrink: 0, whiteSpace: 'nowrap' }}>{currentIdx + 1} / {sources.length}</span>
+          <span style={{ fontSize: '11px', color: K.textFaint, flexShrink: 0, whiteSpace: 'nowrap' }}>{currentIdx + 1} / {allSources.length}</span>
         </div>
       </div>
 
@@ -482,7 +365,7 @@ export function RegulationReviewTable({ initialSourceId }: { initialSourceId?: n
                         <input value={editValue} onChange={e => setEditValue(e.target.value)} autoFocus
                           style={{ flex: 1, padding: '4px 8px', fontSize: '12px', border: `1px solid ${K.accentBorder}`, borderRadius: '5px', fontFamily: 'inherit', background: K.inputBg, color: K.textPrimary, outline: 'none' }} />
                         <button onClick={() => saveEdit(row.id)} style={{ padding: '3px 8px', background: K.accent, border: 'none', borderRadius: '4px', color: '#fff', fontSize: '11px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
-                        <button onClick={() => setEditingId(null)} style={{ padding: '3px 6px', background: '#fff', border: `1px solid ${K.border}`, borderRadius: '4px', color: K.textMuted, fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
+                        <button onClick={() => setEditingId(null)} style={{ padding: '3px 6px', background: '#fff', border: `1px solid ${K.border}`, borderRadius: '4px', color: K.textMuted, fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit' }}>&times;</button>
                       </div>
                     ) : (
                       <span style={{ color: K.textPrimary, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{row.value}</span>

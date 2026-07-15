@@ -68,31 +68,30 @@ D:\Regulatory Intelligence\
 ## 4. Navigation Mechanism
 
 - **Current:** `TopNav.tsx` provides horizontal navigation bar with 4 nav items (Dashboard, Source Queue, Review, Intelligence Library)
-- **State-driven:** `App.tsx` uses `useState<Screen>` to switch between screens (no router)
-- **Navigation callbacks:** `onNavigate(screen, item?)` prop drilling from App through components
+- **Router-driven (Sprint 1):** `App.tsx` uses React Router (`BrowserRouter`, `Routes`, `Route`) for URL-based navigation
+- **Routes:** `/`, `/sources`, `/sources/:sourceId`, `/regulations`, `/regulations/:regulationId`, `/search`, `*` (404)
+- **TopNav:** Derives active state from `useLocation()` pathname; uses `useNavigate()` for navigation
 - **Superseded:** `Sidebar.tsx` exists but is NOT imported or used by App.tsx
 
 ## 5. Data Flow and State Management
 
-- **No global state:** Each screen manages its own `useState` hooks
-- **No shared data layer:** Components import and define their own static data inline
-- **Navigation state:** `screen` and `sourceId` managed in `App.tsx`
+- **Shared types:** `src/types/index.ts` defines all domain interfaces (Sprint 1)
+- **Mock data layer:** `src/data/` contains domain-specific data files extracted from components (Sprint 1)
+- **Service layer:** `src/services/` provides mock-backed functions; components call services, not data files directly (Sprint 1)
+- **Source queue persistence:** In-memory mutable store in `services/sources.ts` survives navigation within a session
+- **Navigation state:** Managed by React Router; URL params provide source/regulation IDs
 - **Source-to-review flow:** SourceQueue passes `sourceId` via `onNavigate('review-table', id)`, received as `initialSourceId` prop
 
 ## 6. Mock/Static Data Locations
 
-| Component                  | Data                          | Lines    | Records |
-|----------------------------|-------------------------------|----------|---------|
-| `Dashboard.tsx`            | `kpis` array                  | 7-11     | 4       |
-| `Dashboard.tsx`            | `jurisdictions` array         | 13-20    | 6       |
-| `Dashboard.tsx`            | `alerts` array                | 22-29    | 6       |
-| `SourceQueue.tsx`          | `initialRows` array           | 27-40    | 12      |
-| `RegulationReview.tsx`     | `regulation` object           | 6-22     | 1       |
-| `RegulationReview.tsx`     | `sourceText` (Chinese text)   | 24-63    | ~40 lines |
-| `RegulationReview.tsx`     | `evidenceMap` object          | 65-90    | 6 fields |
-| `RegulationReviewTable.tsx`| `sources` array               | 28-161   | 6 sources, 13 fields each |
-| `SearchExport.tsx`         | `allResults` array            | 6-19     | 12      |
-| `SearchExport.tsx`         | `savedViews` array            | 21-27    | 5       |
+**Sprint 1:** All mock data has been extracted from components into `src/data/` files. Components now import data exclusively via the service layer (`src/services/`).
+
+| Data File              | Contents                                    | Records |
+|------------------------|---------------------------------------------|---------|
+| `src/data/dashboard.ts`| KPIs, jurisdictions, alerts                 | 4 + 6 + 6 |
+| `src/data/sources.ts`  | Source queue rows                            | 12      |
+| `src/data/regulations.ts`| Regulation detail, source text, evidence map, review sources | 1 + 6 (13 fields each) |
+| `src/data/search.ts`   | Search results, saved views                 | 12 + 5  |
 
 **Total static data:** ~200 lines of inline mock data across 4 components.
 
@@ -104,7 +103,11 @@ D:\Regulatory Intelligence\
 | `K` tokens        | `kiaa-tokens.ts`   | All screen components                |
 | `impactStyle()`   | `kiaa-tokens.ts`   | Dashboard, SearchExport              |
 | `statusStyle()`   | `kiaa-tokens.ts`   | Dashboard, SourceQueue, RegulationReview |
-| `Screen` type     | `kiaa-tokens.ts`   | App, TopNav, Sidebar, Dashboard, SourceQueue |
+| `Screen` type     | `kiaa-tokens.ts`   | Sidebar (legacy; navigation now uses React Router) |
+| `LoadingState`    | `StateViews.tsx`   | Available for async data loading     |
+| `EmptyState`      | `StateViews.tsx`   | RegulationReviewTable                |
+| `ErrorState`      | `StateViews.tsx`   | RegulationReview, RegulationReviewTable |
+| `NotFound`        | `NotFound.tsx`     | App.tsx (catch-all 404 route)        |
 
 ## 8. Figma-Generated Components
 
@@ -117,12 +120,12 @@ D:\Regulatory Intelligence\
 
 ## 9. Known Technical Issues
 
-1. **No routing:** Screen switching is state-based; browser back/forward doesn't work; URLs don't change
+1. ~~**No routing:**~~ Resolved in Sprint 1 — React Router with URL-based navigation and browser back/forward
 2. **Sidebar.tsx unused:** `Sidebar.tsx` component exists but is not imported by App.tsx (superseded by TopNav.tsx)
 3. **47 unused UI components:** Full shadcn/ui library in `ui/` directory -- none are imported by application code
 4. **ImageWithFallback unused:** Figma-generated component not referenced anywhere
-5. **Hardcoded data:** All data is inline static arrays/objects in component files
-6. **No data sharing:** RegulationReview and RegulationReviewTable have overlapping but separate data for the same regulations
+5. ~~**Hardcoded data:**~~ Resolved in Sprint 1 — data extracted to `src/data/`, accessed via `src/services/`
+6. ~~**No data sharing:**~~ Resolved in Sprint 1 — shared types in `src/types/`, shared data via services
 7. **Inline styles:** All styling is inline React `style` props rather than CSS classes or Tailwind utilities
 8. **Figma package name:** `package.json` still has name `@figma/my-make-file`
 9. **pnpm warning:** `pnpm.overrides` in package.json is deprecated; should be in pnpm-workspace.yaml

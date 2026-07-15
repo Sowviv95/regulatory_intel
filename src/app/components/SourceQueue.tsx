@@ -1,45 +1,12 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import { Play, RotateCcw, EyeOff, ArrowRight, RefreshCw, Loader, CheckCircle, AlertCircle } from 'lucide-react';
-import { K, type Screen, statusStyle } from './kiaa-tokens';
+import { K, statusStyle } from './kiaa-tokens';
 import { Badge } from './KBadge';
+import { getSources, updateSourceStatus, updateAllNewToProcessing } from '../../services/sources';
+import type { Source, SourceStatus, ProcessingStage } from '../../types';
 
-type ProcessingStage =
-  | 'Awaiting Extraction'
-  | 'Translating'
-  | 'AI Extraction'
-  | 'Quality Check'
-  | 'Analyst Review'
-  | 'Discarded';
-
-interface QueueRow {
-  id: number;
-  sourceId: number;
-  flag: string;
-  country: string;
-  source: string;
-  language: string;
-  docType: string;
-  discovered: string;
-  status: 'New' | 'Processing' | 'Ready for Review' | 'Irrelevant';
-  stage: ProcessingStage;
-}
-
-const initialRows: QueueRow[] = [
-  { id: 1,  sourceId: 1, flag: '🇹🇼', country: 'Taiwan',      source: 'Health Promotion Administration', language: 'ZH-TW', docType: 'Legislative Amendment',   discovered: 'Jul 14, 2026', status: 'New',             stage: 'Awaiting Extraction' },
-  { id: 2,  sourceId: 2, flag: '🇰🇷', country: 'South Korea', source: 'Ministry of Health and Welfare',  language: 'KO',    docType: 'Regulatory Notice',         discovered: 'Jul 13, 2026', status: 'Processing',      stage: 'AI Extraction'       },
-  { id: 3,  sourceId: 4, flag: '🇻🇳', country: 'Vietnam',     source: 'Vietnam Tobacco Control Fund',    language: 'VI',    docType: 'Implementation Decree',     discovered: 'Jul 12, 2026', status: 'New',             stage: 'Awaiting Extraction' },
-  { id: 4,  sourceId: 3, flag: '🇩🇰', country: 'Denmark',     source: 'Danish Medicines Agency',         language: 'DA',    docType: 'Regulatory Guidance',       discovered: 'Jul 11, 2026', status: 'Ready for Review', stage: 'Analyst Review'      },
-  { id: 5,  sourceId: 5, flag: '🇫🇮', country: 'Finland',     source: 'Finnish Institute for Health',    language: 'FI',    docType: 'Amendment Proposal',        discovered: 'Jul 10, 2026', status: 'Processing',      stage: 'Translating'         },
-  { id: 6,  sourceId: 6, flag: '🇵🇱', country: 'Poland',      source: 'Chief Sanitary Inspectorate',     language: 'PL',    docType: 'Technical Standard',        discovered: 'Jul 9, 2026',  status: 'Ready for Review', stage: 'Analyst Review'      },
-  { id: 7,  sourceId: 1, flag: '🇹🇼', country: 'Taiwan',      source: 'Food and Drug Administration',    language: 'ZH-TW', docType: 'Product Registration',      discovered: 'Jul 8, 2026',  status: 'Irrelevant',      stage: 'Discarded'           },
-  { id: 8,  sourceId: 2, flag: '🇰🇷', country: 'South Korea', source: 'Korea Customs Service',           language: 'KO',    docType: 'Import Restriction Notice', discovered: 'Jul 7, 2026',  status: 'Processing',      stage: 'Quality Check'       },
-  { id: 9,  sourceId: 4, flag: '🇻🇳', country: 'Vietnam',     source: 'Ministry of Health',              language: 'VI',    docType: 'Ministerial Circular',      discovered: 'Jul 6, 2026',  status: 'New',             stage: 'Awaiting Extraction' },
-  { id: 10, sourceId: 3, flag: '🇩🇰', country: 'Denmark',     source: 'Danish Health Authority',         language: 'DA',    docType: 'Public Consultation',       discovered: 'Jul 5, 2026',  status: 'Ready for Review', stage: 'Analyst Review'      },
-  { id: 11, sourceId: 6, flag: '🇵🇱', country: 'Poland',      source: 'Office for Registration of MP',  language: 'PL',    docType: 'Regulatory Update',         discovered: 'Jul 4, 2026',  status: 'Processing',      stage: 'AI Extraction'       },
-  { id: 12, sourceId: 5, flag: '🇫🇮', country: 'Finland',     source: 'Valvira – National Supervisory', language: 'FI',    docType: 'Enforcement Notice',        discovered: 'Jul 3, 2026',  status: 'New',             stage: 'Awaiting Extraction' },
-];
-
-const TABS = ['New', 'Processing', 'Ready for Review', 'Irrelevant'] as const;
+const TABS: SourceStatus[] = ['New', 'Processing', 'Ready for Review', 'Irrelevant'];
 
 function StageChip({ stage }: { stage: ProcessingStage }) {
   const map: Record<ProcessingStage, { color: string; bg: string }> = {
@@ -58,18 +25,35 @@ function StageChip({ stage }: { stage: ProcessingStage }) {
   );
 }
 
-export function SourceQueue({ onNavigate }: { onNavigate: (s: Screen, item?: string) => void }) {
-  const [rows, setRows] = useState<QueueRow[]>(initialRows);
-  const [activeTab, setActiveTab] = useState<typeof TABS[number]>('New');
+export function SourceQueue() {
+  const navigate = useNavigate();
+  // Force re-render counter — services mutate in-memory data
+  const [, setTick] = useState(0);
+  const refresh = useCallback(() => setTick(t => t + 1), []);
 
-  const startProcessing = (id: number) =>
-    setRows(r => r.map(row => row.id === id ? { ...row, status: 'Processing', stage: 'Translating' } : row));
-  const markIrrelevant = (id: number) =>
-    setRows(r => r.map(row => row.id === id ? { ...row, status: 'Irrelevant', stage: 'Discarded' } : row));
-  const retry = (id: number) =>
-    setRows(r => r.map(row => row.id === id ? { ...row, stage: 'AI Extraction' } : row));
-  const restore = (id: number) =>
-    setRows(r => r.map(row => row.id === id ? { ...row, status: 'New', stage: 'Awaiting Extraction' } : row));
+  const rows = getSources();
+  const [activeTab, setActiveTab] = useState<SourceStatus>('New');
+
+  const startProcessing = (id: number) => {
+    updateSourceStatus(id, 'Processing', 'Translating');
+    refresh();
+  };
+  const markIrrelevant = (id: number) => {
+    updateSourceStatus(id, 'Irrelevant', 'Discarded');
+    refresh();
+  };
+  const retry = (id: number) => {
+    updateSourceStatus(id, 'Processing', 'AI Extraction');
+    refresh();
+  };
+  const restore = (id: number) => {
+    updateSourceStatus(id, 'New', 'Awaiting Extraction');
+    refresh();
+  };
+  const processAll = () => {
+    updateAllNewToProcessing();
+    refresh();
+  };
 
   const tabCounts = TABS.reduce((acc, t) => ({ ...acc, [t]: rows.filter(r => r.status === t).length }), {} as Record<string, number>);
   const visible = rows.filter(r => r.status === activeTab);
@@ -95,11 +79,11 @@ export function SourceQueue({ onNavigate }: { onNavigate: (s: Screen, item?: str
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
         <div>
           <h1 style={{ fontSize: '20px', fontWeight: 800, color: K.textPrimary, margin: 0 }}>Source Queue</h1>
-          <p style={{ fontSize: '12px', color: K.textMuted, marginTop: '3px' }}>Intake and processing pipeline · Last updated Jul 15, 2026 09:14</p>
+          <p style={{ fontSize: '12px', color: K.textMuted, marginTop: '3px' }}>Intake and processing pipeline &middot; Last updated Jul 15, 2026 09:14</p>
         </div>
         <div style={{ display: 'flex', gap: '7px' }}>
           <button
-            onClick={() => setRows(r => r.map(row => row.status === 'New' ? { ...row, status: 'Processing', stage: 'Translating' } : row))}
+            onClick={processAll}
             style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 14px', background: K.accent, border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
             <Play size={12} /> Process All
           </button>
@@ -204,7 +188,7 @@ export function SourceQueue({ onNavigate }: { onNavigate: (s: Screen, item?: str
                     )}
                     {row.status === 'Ready for Review' && (
                       <>
-                        <ActionBtn icon={<ArrowRight size={11} />} label="Open Review" accent onClick={() => onNavigate('review-table', String(row.sourceId))} />
+                        <ActionBtn icon={<ArrowRight size={11} />} label="Open Review" accent onClick={() => navigate(`/sources/${row.sourceId}`)} />
                         <ActionBtn icon={<EyeOff size={11} />} label="Mark Irrelevant" onClick={() => markIrrelevant(row.id)} />
                       </>
                     )}

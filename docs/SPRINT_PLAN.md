@@ -7,7 +7,7 @@
 
 ## Sprint 0 -- Audit and Documentation
 
-**Status:** In Progress
+**Status:** Completed
 
 **Objective:** Audit the existing codebase, document the PoC requirements and architecture, and establish a clean development baseline.
 
@@ -32,6 +32,8 @@
 ---
 
 ## Sprint 1 -- Routing and Shared Frontend Data Layer
+
+**Status:** Completed
 
 **Objective:** Replace state-based screen switching with React Router and extract static data into a shared data layer.
 

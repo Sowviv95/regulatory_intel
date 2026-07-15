@@ -2,29 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Search, Download, Bell, ChevronDown, Check, X, BookmarkPlus, FileSpreadsheet, FileText, SlidersHorizontal, Star, Library } from 'lucide-react';
 import { K, impactStyle } from './kiaa-tokens';
 import { Badge } from './KBadge';
-
-const allResults = [
-  { id: 1,  flag: '🇹🇼', jurisdiction: 'Taiwan',      title: 'Tobacco Hazards Prevention Act Amendment 2026',            products: ['E-cigarettes', 'HTP'],              regStatus: 'Approved',   impact: 'High',   sourceType: 'Legislative Amendment', date: 'Jul 14, 2026' },
-  { id: 2,  flag: '🇰🇷', jurisdiction: 'South Korea', title: 'Electronic Cigarette Content Disclosure Rules',            products: ['E-cigarettes'],                     regStatus: 'Published',  impact: 'High',   sourceType: 'Regulatory Notice',     date: 'Jul 13, 2026' },
-  { id: 3,  flag: '🇻🇳', jurisdiction: 'Vietnam',     title: 'Tobacco Control Law Phase 3 Implementation Decree',        products: ['Cigarettes', 'HTP'],                regStatus: 'Approved',   impact: 'High',   sourceType: 'Implementation Decree', date: 'Jul 12, 2026' },
-  { id: 4,  flag: '🇩🇰', jurisdiction: 'Denmark',     title: 'Nicotine Pouch Maximum Strength Regulation',               products: ['Nicotine Pouches'],                 regStatus: 'Approved',   impact: 'Medium', sourceType: 'Regulatory Guidance',   date: 'Jul 11, 2026' },
-  { id: 5,  flag: '🇫🇮', jurisdiction: 'Finland',     title: 'E-cigarette Point-of-Sale Display Restrictions',           products: ['E-cigarettes'],                     regStatus: 'Published',  impact: 'Low',    sourceType: 'Amendment Proposal',    date: 'Jul 10, 2026' },
-  { id: 6,  flag: '🇵🇱', jurisdiction: 'Poland',      title: 'Heated Tobacco Product Labeling Requirements',             products: ['HTP'],                              regStatus: 'Approved',   impact: 'Medium', sourceType: 'Technical Standard',    date: 'Jul 9, 2026'  },
-  { id: 7,  flag: '🇹🇼', jurisdiction: 'Taiwan',      title: 'Online Tobacco Advertising Prohibition Enforcement',       products: ['Cigarettes', 'E-cigarettes'],        regStatus: 'Published',  impact: 'High',   sourceType: 'Enforcement Notice',    date: 'Jul 7, 2026'  },
-  { id: 8,  flag: '🇰🇷', jurisdiction: 'South Korea', title: 'Flavored Tobacco Product Import Restriction',              products: ['Cigarettes', 'E-cigarettes'],        regStatus: 'Published',  impact: 'Medium', sourceType: 'Import Restriction',    date: 'Jul 5, 2026'  },
-  { id: 9,  flag: '🇻🇳', jurisdiction: 'Vietnam',     title: 'Tobacco Retailer Licensing Ministerial Circular',          products: ['Cigarettes'],                        regStatus: 'Approved',   impact: 'Low',    sourceType: 'Ministerial Circular',  date: 'Jun 30, 2026' },
-  { id: 10, flag: '🇩🇰', jurisdiction: 'Denmark',     title: 'ENDS Device Safety Standards Consultation (Closed)',       products: ['E-cigarettes'],                     regStatus: 'Published',  impact: 'Low',    sourceType: 'Public Consultation',   date: 'Jun 28, 2026' },
-  { id: 11, flag: '🇵🇱', jurisdiction: 'Poland',      title: 'Nicotine Replacement Product Registration Requirements',   products: ['Nicotine Pouches'],                 regStatus: 'Approved',   impact: 'Medium', sourceType: 'Regulatory Update',     date: 'Jun 25, 2026' },
-  { id: 12, flag: '🇫🇮', jurisdiction: 'Finland',     title: 'Flavoured E-liquid Ban — Valvira Enforcement Notice',      products: ['E-cigarettes'],                     regStatus: 'Published',  impact: 'High',   sourceType: 'Enforcement Notice',    date: 'Jun 20, 2026' },
-];
-
-const savedViews = [
-  { id: 1, name: 'High Impact — APAC',    count: 14, starred: true  },
-  { id: 2, name: 'EU Nicotine Pouches',   count: 8,  starred: true  },
-  { id: 3, name: 'E-cigarette Watch',     count: 32, starred: false },
-  { id: 4, name: 'Nordic Market',         count: 18, starred: false },
-  { id: 5, name: 'Published This Month',  count: 9,  starred: false },
-];
+import { searchRegulations, getSavedViews } from '../../services/search';
 
 const REG_STATUSES = ['Approved', 'Published'];
 
@@ -77,15 +55,16 @@ export function SearchExport() {
   const [alertFreq, setAlertFreq]     = useState('Daily digest');
   const [exported, setExported]       = useState<string | null>(null);
 
-  const filtered = allResults.filter(r => {
-    const q = query.toLowerCase();
-    const matchQ   = !q || r.title.toLowerCase().includes(q) || r.jurisdiction.toLowerCase().includes(q);
-    const matchJ   = jurisdiction === 'All' || r.jurisdiction === jurisdiction;
-    const matchP   = product === 'All' || r.products.some(p => p.toLowerCase().includes(product.toLowerCase()));
-    const matchS   = regStatus === 'All' || r.regStatus === regStatus;
-    const matchT   = sourceType === 'All' || r.sourceType === sourceType;
-    const matchI   = impact === 'All' || r.impact === impact;
-    return matchQ && matchJ && matchP && matchS && matchT && matchI;
+  const savedViews = getSavedViews();
+
+  const filtered = searchRegulations({
+    q: query,
+    jurisdiction,
+    product,
+    regStatus,
+    sourceType,
+    impact,
+    dateRange,
   });
 
   const toggleRow = (id: number) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -146,7 +125,7 @@ export function SearchExport() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div>
               <h1 style={{ fontSize: '18px', fontWeight: 800, color: K.textPrimary, margin: 0 }}>Intelligence Library</h1>
-              <p style={{ fontSize: '11px', color: K.textMuted, marginTop: '2px' }}>{filtered.length} approved records · Tobacco & Nicotine regulatory intelligence</p>
+              <p style={{ fontSize: '11px', color: K.textMuted, marginTop: '2px' }}>{filtered.length} approved records &middot; Tobacco & Nicotine regulatory intelligence</p>
             </div>
             <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
               {exported && (
@@ -169,7 +148,7 @@ export function SearchExport() {
           {/* Search */}
           <div style={{ position: 'relative', marginBottom: '10px' }}>
             <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: K.textFaint }} />
-            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by regulation title, jurisdiction, or keyword…"
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by regulation title, jurisdiction, or keyword\u2026"
               style={{ width: '100%', padding: '9px 36px 9px 34px', background: '#fff', border: `1px solid ${K.inputBorder}`, borderRadius: '8px', fontSize: '13px', color: K.textPrimary, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }} />
             {query && <button onClick={() => setQuery('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: K.textFaint, padding: 0, display: 'flex' }}><X size={14} /></button>}
           </div>
@@ -283,7 +262,7 @@ export function SearchExport() {
             <div style={{ marginBottom: '14px' }}>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: K.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' }}>Filter Conditions</label>
               <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${K.border}`, borderRadius: '7px', fontSize: '12px', color: K.textSecondary, lineHeight: 1.7 }}>
-                {!hasFilters && <span style={{ color: K.textFaint }}>No filters active — alert will match all records</span>}
+                {!hasFilters && <span style={{ color: K.textFaint }}>No filters active &mdash; alert will match all records</span>}
                 {jurisdiction !== 'All' && <div>Jurisdiction: <strong>{jurisdiction}</strong></div>}
                 {product !== 'All' && <div>Product: <strong>{product}</strong></div>}
                 {regStatus !== 'All' && <div>Status: <strong>{regStatus}</strong></div>}

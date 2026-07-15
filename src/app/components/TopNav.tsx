@@ -1,14 +1,24 @@
+import { useLocation, useNavigate } from 'react-router';
 import { LayoutDashboard, Inbox, FileText, Library, Settings, Leaf } from 'lucide-react';
-import { K, type Screen } from './kiaa-tokens';
+import { K } from './kiaa-tokens';
 
 const navItems = [
-  { id: 'dashboard' as Screen,    label: 'Dashboard',          icon: LayoutDashboard },
-  { id: 'source-queue' as Screen, label: 'Source Queue',        icon: Inbox           },
-  { id: 'review-table' as Screen, label: 'Review',              icon: FileText        },
-  { id: 'search-export' as Screen,label: 'Intelligence Library',icon: Library         },
+  { path: '/',        label: 'Dashboard',           icon: LayoutDashboard, matchPrefixes: ['/'] },
+  { path: '/sources', label: 'Source Queue',         icon: Inbox,           matchPrefixes: ['/sources'] },
+  { path: '/regulations', label: 'Review',           icon: FileText,        matchPrefixes: ['/regulations'] },
+  { path: '/search',  label: 'Intelligence Library', icon: Library,         matchPrefixes: ['/search'] },
 ];
 
-export function TopNav({ current, onNavigate }: { current: Screen; onNavigate: (s: Screen) => void }) {
+function isActive(pathname: string, item: typeof navItems[number]): boolean {
+  // Dashboard is only active on exact "/"
+  if (item.path === '/') return pathname === '/';
+  return item.matchPrefixes.some(p => pathname.startsWith(p));
+}
+
+export function TopNav() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   return (
     <div style={{
       height: '52px',
@@ -25,7 +35,10 @@ export function TopNav({ current, onNavigate }: { current: Screen; onNavigate: (
       zIndex: 50,
     }}>
       {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginRight: '28px', flexShrink: 0 }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: '9px', marginRight: '28px', flexShrink: 0, cursor: 'pointer' }}
+        onClick={() => navigate('/')}
+      >
         <div style={{
           width: '28px', height: '28px', background: K.accent, borderRadius: '7px',
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
@@ -43,12 +56,13 @@ export function TopNav({ current, onNavigate }: { current: Screen; onNavigate: (
 
       {/* Nav items */}
       <nav style={{ display: 'flex', alignItems: 'center', gap: '2px', flex: 1 }}>
-        {navItems.map(({ id, label, icon: Icon }) => {
-          const active = current === id;
+        {navItems.map(item => {
+          const active = isActive(location.pathname, item);
+          const Icon = item.icon;
           return (
             <button
-              key={id}
-              onClick={() => onNavigate(id)}
+              key={item.path}
+              onClick={() => navigate(item.path)}
               style={{
                 display: 'flex', alignItems: 'center', gap: '6px',
                 padding: '6px 12px',
@@ -72,7 +86,7 @@ export function TopNav({ current, onNavigate }: { current: Screen; onNavigate: (
               }}
             >
               <Icon size={14} />
-              {label}
+              {item.label}
               {active && (
                 <span style={{
                   position: 'absolute', bottom: '-7px', left: '12px', right: '12px',
