@@ -117,6 +117,8 @@
 
 ## Sprint 4 -- Search, Evidence, and Export
 
+**Status:** Completed
+
 **Objective:** Connect the Intelligence Library to shared data and implement local export functionality.
 
 **Scope:**

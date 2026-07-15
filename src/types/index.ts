@@ -168,6 +168,26 @@ export interface SearchResult {
   date: string;
 }
 
+export interface SearchableRecord {
+  sourceId: number;
+  sourceTitle: string;
+  sourceName: string;
+  flag: string;
+  jurisdiction: string;
+  docType: string;
+  date: string;
+  fieldId: number;
+  fieldName: string;
+  category: string;
+  extractedValue: string;
+  reviewedValue: string | null;
+  finalValue: string;
+  evidence: string;
+  confidence: number;
+  status: FieldStatus;
+  comment: string | null;
+}
+
 export interface SavedView {
   id: number;
   name: string;

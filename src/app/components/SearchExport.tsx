@@ -1,21 +1,45 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, Download, Bell, ChevronDown, Check, X, BookmarkPlus, FileSpreadsheet, FileText, SlidersHorizontal, Star, Library } from 'lucide-react';
-import { K, impactStyle } from './kiaa-tokens';
+import { useNavigate } from 'react-router';
+import {
+  Search, Bell, ChevronDown, ChevronUp, Check, X, BookmarkPlus,
+  FileSpreadsheet, FileText, SlidersHorizontal, Star, Library,
+  Eye, Download, AlertCircle, MessageSquare,
+} from 'lucide-react';
+import { K } from './kiaa-tokens';
 import { Badge } from './KBadge';
-import { searchRegulations, getSavedViews } from '../../services/search';
+import {
+  searchRecords, getSavedViews, getUniqueJurisdictions, getUniqueSourceTitles,
+  generateCsv, downloadCsv, getExportSummary,
+  type SearchFilters,
+} from '../../services/search';
+import type { SearchableRecord, FieldStatus } from '../../types';
 
-const REG_STATUSES = ['Approved', 'Published'];
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-function regStatusStyle(s: string) {
-  if (s === 'Published') return { bg: 'rgba(99,102,241,0.08)', text: '#4f46e5', border: 'rgba(99,102,241,0.18)' };
-  return { bg: 'rgba(22,163,74,0.08)', text: '#16a34a', border: 'rgba(22,163,74,0.18)' };
+const fieldStatusStyle = (s: FieldStatus) => {
+  if (s === 'Accepted') return { bg: 'rgba(22,163,74,0.08)', text: '#16a34a', border: 'rgba(22,163,74,0.18)' };
+  if (s === 'Rejected') return { bg: 'rgba(239,68,68,0.08)', text: '#dc2626', border: 'rgba(239,68,68,0.18)' };
+  if (s === 'Flagged')  return { bg: 'rgba(245,158,11,0.08)', text: '#d97706', border: 'rgba(245,158,11,0.18)' };
+  return { bg: 'rgba(107,114,128,0.08)', text: '#6b7280', border: 'rgba(107,114,128,0.18)' };
+};
+
+function ConfidenceDot({ pct }: { pct: number }) {
+  const color = pct >= 90 ? K.accent : pct >= 80 ? '#d97706' : '#dc2626';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: color, flexShrink: 0 }} />
+      <span style={{ fontSize: '11px', fontWeight: 600, color }}>{pct}%</span>
+    </div>
+  );
 }
 
 function FilterChip({ label, options, value, onChange }: { label: string; options: string[]; value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
@@ -27,10 +51,10 @@ function FilterChip({ label, options, value, onChange }: { label: string; option
         <span style={{ color: active ? K.accentText : K.textFaint, fontWeight: 400 }}>{label}:</span>
         <span>{value}</span>
         <ChevronDown size={10} />
-        {active && <button onClick={e => { e.stopPropagation(); onChange('All'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: K.accentText, display: 'flex', lineHeight: 1 }}><X size={10} /></button>}
+        {active && <span onClick={e => { e.stopPropagation(); onChange('All'); }} style={{ display: 'flex', cursor: 'pointer', color: K.accentText }}><X size={10} /></span>}
       </button>
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 100, background: '#fff', border: `1px solid ${K.border}`, borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.09)', minWidth: '160px', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 100, background: '#fff', border: `1px solid ${K.border}`, borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.09)', minWidth: '160px', maxHeight: '240px', overflowY: 'auto' }}>
           {['All', ...options].map(opt => (
             <button key={opt} onClick={() => { onChange(opt); setOpen(false); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 12px', background: value === opt ? K.accentSubtle : 'transparent', color: value === opt ? K.accentText : K.textSecondary, fontSize: '12px', fontWeight: value === opt ? 600 : 400, border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{opt}</button>
           ))}
@@ -40,42 +64,202 @@ function FilterChip({ label, options, value, onChange }: { label: string; option
   );
 }
 
-export function SearchExport() {
-  const [query, setQuery]             = useState('');
-  const [jurisdiction, setJurisdiction] = useState('All');
-  const [product, setProduct]         = useState('All');
-  const [regStatus, setRegStatus]     = useState('All');
-  const [sourceType, setSourceType]   = useState('All');
-  const [impact, setImpact]           = useState('All');
-  const [dateRange, setDateRange]     = useState('All');
-  const [selected, setSelected]       = useState<Set<number>>(new Set());
-  const [activeView, setActiveView]   = useState<number | null>(1);
-  const [showAlert, setShowAlert]     = useState(false);
-  const [alertName, setAlertName]     = useState('');
-  const [alertFreq, setAlertFreq]     = useState('Daily digest');
-  const [exported, setExported]       = useState<string | null>(null);
+// ---------------------------------------------------------------------------
+// Evidence Drawer
+// ---------------------------------------------------------------------------
 
+function EvidenceDrawer({ record, onClose }: { record: SearchableRecord; onClose: () => void }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.32)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: '12px', padding: '28px', width: '560px', maxHeight: '80vh', overflow: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.15)', position: 'relative', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }} onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: K.textFaint }}><X size={16} /></button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+          <Eye size={16} style={{ color: K.accent }} />
+          <h2 style={{ fontSize: '15px', fontWeight: 700, color: K.textPrimary, margin: 0 }}>Evidence Inspection</h2>
+        </div>
+
+        {/* Source info */}
+        <div style={{ padding: '12px', background: '#fafafa', border: `1px solid ${K.border}`, borderRadius: '8px', marginBottom: '16px' }}>
+          <div style={{ fontSize: '10px', fontWeight: 600, color: K.textFaint, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Source</div>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: K.textPrimary }}>{record.flag} {record.sourceTitle}</div>
+          <div style={{ fontSize: '11px', color: K.textMuted, marginTop: '2px' }}>{record.sourceName} &middot; {record.jurisdiction} &middot; {record.docType}</div>
+        </div>
+
+        {/* Field info */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+          <div style={{ padding: '10px 12px', background: '#fff', border: `1px solid ${K.borderSubtle}`, borderRadius: '7px' }}>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: K.textFaint, textTransform: 'uppercase', marginBottom: '4px' }}>Field</div>
+            <div style={{ fontSize: '12px', fontWeight: 500, color: K.textPrimary }}>{record.fieldName}</div>
+            <span style={{ fontSize: '10px', color: K.textFaint }}>{record.category}</span>
+          </div>
+          <div style={{ padding: '10px 12px', background: '#fff', border: `1px solid ${K.borderSubtle}`, borderRadius: '7px' }}>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: K.textFaint, textTransform: 'uppercase', marginBottom: '4px' }}>Status & Confidence</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Badge label={record.status} style={fieldStatusStyle(record.status)} />
+              <ConfidenceDot pct={record.confidence} />
+            </div>
+          </div>
+        </div>
+
+        {/* Values */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ fontSize: '10px', fontWeight: 600, color: K.textFaint, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Extracted Value</div>
+          <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${K.border}`, borderRadius: '7px', fontSize: '12px', color: K.textSecondary, lineHeight: 1.6 }}>
+            {record.extractedValue}
+          </div>
+        </div>
+
+        {record.reviewedValue && record.reviewedValue !== record.extractedValue && (
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: K.accentText, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Reviewed Value</div>
+            <div style={{ padding: '10px 12px', background: K.accentSubtle, border: `1px solid ${K.accentBorder}`, borderRadius: '7px', fontSize: '12px', color: K.textPrimary, lineHeight: 1.6 }}>
+              {record.reviewedValue}
+            </div>
+          </div>
+        )}
+
+        {/* Evidence (immutable) */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ fontSize: '10px', fontWeight: 600, color: K.textFaint, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Source Evidence (immutable)</div>
+          <div style={{ padding: '14px', background: 'rgba(22,163,74,0.05)', border: `1px solid ${K.accentBorder}`, borderRadius: '8px', fontSize: '12px', lineHeight: 1.7, color: K.textSecondary, position: 'relative' }}>
+            <div style={{ width: '3px', position: 'absolute', left: 0, top: 0, bottom: 0, background: K.accent, borderRadius: '3px 0 0 3px' }} />
+            {record.evidence}
+          </div>
+        </div>
+
+        {/* Comment */}
+        {record.comment && (
+          <div>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: K.textFaint, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Reviewer Comment</div>
+            <div style={{ padding: '10px 12px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.12)', borderRadius: '7px', fontSize: '12px', color: '#2563eb', display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+              <MessageSquare size={12} style={{ marginTop: '2px', flexShrink: 0 }} />
+              {record.comment}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Export Summary Modal
+// ---------------------------------------------------------------------------
+
+function ExportSummary({ records, onClose, onConfirm }: { records: SearchableRecord[]; onClose: () => void; onConfirm: () => void }) {
+  const summary = getExportSummary(records);
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.32)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: '12px', padding: '28px', width: '400px', boxShadow: '0 24px 60px rgba(0,0,0,0.15)', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+          <Download size={16} style={{ color: K.accent }} />
+          <h2 style={{ fontSize: '15px', fontWeight: 700, color: K.textPrimary, margin: 0 }}>Export Summary</h2>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+          {[
+            { label: 'Records', value: summary.total, color: K.textPrimary },
+            { label: 'Sources', value: summary.sources, color: K.textPrimary },
+            { label: 'Accepted', value: summary.accepted, color: K.accent },
+            { label: 'Rejected', value: summary.rejected, color: '#dc2626' },
+            { label: 'Flagged', value: summary.flagged, color: '#d97706' },
+            { label: 'Pending', value: summary.pending, color: '#6b7280' },
+          ].map(item => (
+            <div key={item.label} style={{ padding: '10px 12px', background: '#fafafa', border: `1px solid ${K.border}`, borderRadius: '7px' }}>
+              <div style={{ fontSize: '20px', fontWeight: 700, color: item.color }}>{item.value}</div>
+              <div style={{ fontSize: '11px', color: K.textMuted }}>{item.label}</div>
+            </div>
+          ))}
+        </div>
+        {summary.missingEvidence > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.18)', borderRadius: '7px', marginBottom: '16px', fontSize: '12px', color: '#d97706' }}>
+            <AlertCircle size={13} /> {summary.missingEvidence} records have no evidence reference
+          </div>
+        )}
+        <div style={{ fontSize: '11px', color: K.textMuted, marginBottom: '16px' }}>
+          The CSV will include: source ID/title, field name, extracted value, reviewed value, final value, review status, confidence, comment, and evidence reference.
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '9px', border: `1px solid ${K.border}`, borderRadius: '7px', background: '#fff', color: K.textSecondary, fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+          <button onClick={onConfirm} style={{ flex: 2, padding: '9px', border: 'none', borderRadius: '7px', background: K.accent, color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+            <Download size={13} /> Export CSV
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
+export function SearchExport() {
+  const navigate = useNavigate();
+
+  // Filters
+  const [query, setQuery] = useState('');
+  const [jurisdiction, setJurisdiction] = useState('All');
+  const [category, setCategory] = useState('All');
+  const [status, setStatus] = useState('All');
+  const [confidence, setConfidence] = useState('All');
+  const [source, setSource] = useState('All');
+  const [sortBy, setSortBy] = useState<SearchFilters['sortBy']>(undefined);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  // UI state
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [activeView, setActiveView] = useState<number | null>(1);
+  const [evidenceRecord, setEvidenceRecord] = useState<SearchableRecord | null>(null);
+  const [showExportSummary, setShowExportSummary] = useState(false);
+  const [exported, setExported] = useState(false);
+
+  const jurisdictions = getUniqueJurisdictions();
+  const sourceTitles = getUniqueSourceTitles();
   const savedViews = getSavedViews();
 
-  const filtered = searchRegulations({
-    q: query,
-    jurisdiction,
-    product,
-    regStatus,
-    sourceType,
-    impact,
-    dateRange,
-  });
+  const filtered = searchRecords({ q: query, jurisdiction, category, status, confidence, source, sortBy, sortDir });
 
-  const toggleRow = (id: number) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const toggleAll = () => selected.size === filtered.length ? setSelected(new Set()) : setSelected(new Set(filtered.map(r => r.id)));
-  const clearFilters = () => { setJurisdiction('All'); setProduct('All'); setRegStatus('All'); setSourceType('All'); setImpact('All'); setDateRange('All'); };
-  const hasFilters = [jurisdiction, product, regStatus, sourceType, impact, dateRange].some(v => v !== 'All');
+  // Selection uses composite key sourceId:fieldId
+  const recordKey = (r: SearchableRecord) => `${r.sourceId}:${r.fieldId}`;
+  const toggleRow = (r: SearchableRecord) => {
+    const k = recordKey(r);
+    setSelected(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  };
+  const toggleAll = () => {
+    if (selected.size === filtered.length && filtered.length > 0) setSelected(new Set());
+    else setSelected(new Set(filtered.map(recordKey)));
+  };
 
-  const handleExport = (fmt: string) => { setExported(fmt); setTimeout(() => setExported(null), 2500); };
+  const hasFilters = [jurisdiction, category, status, confidence, source].some(v => v !== 'All');
+  const clearFilters = () => { setJurisdiction('All'); setCategory('All'); setStatus('All'); setConfidence('All'); setSource('All'); };
 
-  const thStyle: React.CSSProperties = { padding: '9px 14px', fontSize: '11px', fontWeight: 600, color: K.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left', borderBottom: `1px solid ${K.border}`, background: '#fafafa', whiteSpace: 'nowrap' };
-  const tdStyle: React.CSSProperties = { padding: '10px 14px', fontSize: '12px', color: K.textSecondary, borderBottom: `1px solid ${K.borderSubtle}`, verticalAlign: 'middle' };
+  // Sort toggle
+  const toggleSort = (col: NonNullable<SearchFilters['sortBy']>) => {
+    if (sortBy === col) {
+      if (sortDir === 'desc') setSortDir('asc');
+      else { setSortBy(undefined); setSortDir('desc'); }
+    } else { setSortBy(col); setSortDir('desc'); }
+  };
+  const SortIcon = ({ col }: { col: NonNullable<SearchFilters['sortBy']> }) => {
+    if (sortBy !== col) return null;
+    return sortDir === 'asc' ? <ChevronUp size={9} /> : <ChevronDown size={9} />;
+  };
+
+  // Export
+  const recordsToExport = selected.size > 0
+    ? filtered.filter(r => selected.has(recordKey(r)))
+    : filtered;
+  const doExport = () => {
+    const csv = generateCsv(recordsToExport);
+    downloadCsv(csv, `regulatory-intelligence-export-${Date.now()}.csv`);
+    setShowExportSummary(false);
+    setExported(true);
+    setTimeout(() => setExported(false), 3000);
+  };
+
+  const thBase: React.CSSProperties = { padding: '9px 12px', fontSize: '11px', fontWeight: 600, color: K.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left', borderBottom: `1px solid ${K.border}`, background: '#fafafa', whiteSpace: 'nowrap' };
+  const tdBase: React.CSSProperties = { padding: '10px 12px', fontSize: '12px', color: K.textSecondary, borderBottom: `1px solid ${K.borderSubtle}`, verticalAlign: 'middle' };
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 52px)', background: K.pageBg, fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", overflow: 'hidden' }}>
@@ -120,27 +304,20 @@ export function SearchExport() {
       {/* Main content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '20px 20px 0', flexShrink: 0 }}>
-
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div>
               <h1 style={{ fontSize: '18px', fontWeight: 800, color: K.textPrimary, margin: 0 }}>Intelligence Library</h1>
-              <p style={{ fontSize: '11px', color: K.textMuted, marginTop: '2px' }}>{filtered.length} approved records &middot; Tobacco & Nicotine regulatory intelligence</p>
+              <p style={{ fontSize: '11px', color: K.textMuted, marginTop: '2px' }}>{filtered.length} field records across {new Set(filtered.map(r => r.sourceId)).size} sources</p>
             </div>
             <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
               {exported && (
                 <span style={{ padding: '5px 10px', background: K.accentSubtle, border: `1px solid ${K.accentBorder}`, borderRadius: '6px', fontSize: '11px', color: K.accentText, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Check size={11} /> Exported as {exported.toUpperCase()}
+                  <Check size={11} /> CSV exported
                 </span>
               )}
-              <button onClick={() => setShowAlert(true)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#fff', border: `1px solid ${K.border}`, borderRadius: '6px', fontSize: '12px', fontWeight: 500, color: K.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
-                <Bell size={12} /> Create Alert
-              </button>
-              <button onClick={() => handleExport('CSV')} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#fff', border: `1px solid ${K.border}`, borderRadius: '6px', fontSize: '12px', fontWeight: 500, color: K.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
-                <FileText size={12} style={{ color: '#2563eb' }} /> CSV
-              </button>
-              <button onClick={() => handleExport('Excel')} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 13px', background: K.accent, border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
-                <FileSpreadsheet size={12} /> Excel
+              <button onClick={() => setShowExportSummary(true)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 13px', background: K.accent, border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
+                <FileText size={12} /> Export CSV {selected.size > 0 && `(${selected.size})`}
               </button>
             </div>
           </div>
@@ -148,7 +325,7 @@ export function SearchExport() {
           {/* Search */}
           <div style={{ position: 'relative', marginBottom: '10px' }}>
             <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: K.textFaint }} />
-            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by regulation title, jurisdiction, or keyword\u2026"
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search titles, values, evidence, comments, jurisdictions\u2026"
               style={{ width: '100%', padding: '9px 36px 9px 34px', background: '#fff', border: `1px solid ${K.inputBorder}`, borderRadius: '8px', fontSize: '13px', color: K.textPrimary, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }} />
             {query && <button onClick={() => setQuery('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: K.textFaint, padding: 0, display: 'flex' }}><X size={14} /></button>}
           </div>
@@ -156,12 +333,11 @@ export function SearchExport() {
           {/* Filters */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingBottom: '14px', flexWrap: 'wrap' }}>
             <SlidersHorizontal size={12} style={{ color: K.textFaint, flexShrink: 0 }} />
-            <FilterChip label="Jurisdiction" options={['Taiwan', 'Denmark', 'Finland', 'Poland', 'South Korea', 'Vietnam']} value={jurisdiction} onChange={setJurisdiction} />
-            <FilterChip label="Product" options={['Cigarettes', 'E-cigarettes', 'HTP', 'Nicotine Pouches']} value={product} onChange={setProduct} />
-            <FilterChip label="Reg. Status" options={REG_STATUSES} value={regStatus} onChange={setRegStatus} />
-            <FilterChip label="Source Type" options={['Legislative Amendment', 'Regulatory Notice', 'Implementation Decree', 'Technical Standard', 'Public Consultation', 'Enforcement Notice', 'Ministerial Circular', 'Import Restriction', 'Regulatory Update', 'Regulatory Guidance', 'Amendment Proposal']} value={sourceType} onChange={setSourceType} />
-            <FilterChip label="Sector Impact" options={['High', 'Medium', 'Low']} value={impact} onChange={setImpact} />
-            <FilterChip label="Date" options={['Last 30 days', 'Last 90 days', 'This year']} value={dateRange} onChange={setDateRange} />
+            <FilterChip label="Jurisdiction" options={jurisdictions} value={jurisdiction} onChange={setJurisdiction} />
+            <FilterChip label="Category" options={['Metadata', 'Content', 'Assessment', 'Dates']} value={category} onChange={setCategory} />
+            <FilterChip label="Status" options={['Pending', 'Accepted', 'Rejected', 'Flagged']} value={status} onChange={setStatus} />
+            <FilterChip label="Confidence" options={['High', 'Medium', 'Low']} value={confidence} onChange={setConfidence} />
+            <FilterChip label="Source" options={sourceTitles} value={source} onChange={setSource} />
             {hasFilters && (
               <button onClick={clearFilters} style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '5px 8px', border: 'none', borderRadius: '5px', background: 'transparent', color: K.textMuted, fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit' }}>
                 <X size={10} /> Clear all
@@ -176,116 +352,99 @@ export function SearchExport() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={{ ...thStyle, width: '38px' }}>
+                  <th style={{ ...thBase, width: '34px' }}>
                     <input type="checkbox" checked={selected.size === filtered.length && filtered.length > 0} onChange={toggleAll} style={{ cursor: 'pointer' }} />
                   </th>
-                  <th style={thStyle}>Regulation Title</th>
-                  <th style={thStyle}>Jurisdiction</th>
-                  <th style={thStyle}>Products Affected</th>
-                  <th style={thStyle}>Status</th>
-                  <th style={thStyle}>Impact</th>
-                  <th style={thStyle}>Relevant Date</th>
+                  <th style={{ ...thBase, cursor: 'pointer' }} onClick={() => toggleSort('jurisdiction')}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>Source <SortIcon col="jurisdiction" /></span>
+                  </th>
+                  <th style={{ ...thBase, cursor: 'pointer' }} onClick={() => toggleSort('fieldName')}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>Field <SortIcon col="fieldName" /></span>
+                  </th>
+                  <th style={{ ...thBase, minWidth: '200px' }}>Final Value</th>
+                  <th style={{ ...thBase, cursor: 'pointer' }} onClick={() => toggleSort('confidence')}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>Conf. <SortIcon col="confidence" /></span>
+                  </th>
+                  <th style={{ ...thBase, cursor: 'pointer' }} onClick={() => toggleSort('status')}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>Status <SortIcon col="status" /></span>
+                  </th>
+                  <th style={{ ...thBase, textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '48px', textAlign: 'center', color: K.textFaint, fontSize: '13px' }}>
+                      {query || hasFilters ? 'No records match your search or filters.' : 'No field records available yet.'}
+                    </td>
+                  </tr>
+                )}
                 {filtered.map((row, i) => {
-                  const isSel = selected.has(row.id);
-                  const is = impactStyle(row.impact);
-                  const rs = regStatusStyle(row.regStatus);
+                  const k = recordKey(row);
+                  const isSel = selected.has(k);
+                  const ss = fieldStatusStyle(row.status);
+                  const wasEdited = row.reviewedValue !== null && row.reviewedValue !== row.extractedValue;
                   const bg = isSel ? 'rgba(22,163,74,0.04)' : i % 2 === 0 ? '#fff' : '#fafafa';
                   return (
-                    <tr key={row.id} style={{ background: bg, cursor: 'pointer', transition: 'background 0.1s' }}
+                    <tr key={k} style={{ background: bg, transition: 'background 0.1s' }}
                       onMouseEnter={e => { if (!isSel) (e.currentTarget as HTMLElement).style.background = K.cardBgHover; }}
                       onMouseLeave={e => { if (!isSel) (e.currentTarget as HTMLElement).style.background = bg; }}
                     >
-                      <td style={tdStyle} onClick={() => toggleRow(row.id)}>
-                        <input type="checkbox" checked={isSel} onChange={() => toggleRow(row.id)} style={{ cursor: 'pointer' }} />
+                      <td style={tdBase} onClick={() => toggleRow(row)}>
+                        <input type="checkbox" checked={isSel} onChange={() => toggleRow(row)} style={{ cursor: 'pointer' }} />
                       </td>
-                      <td style={{ ...tdStyle, maxWidth: '300px' }}>
-                        <div style={{ fontWeight: 500, color: K.textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.title}</div>
-                        <div style={{ fontSize: '11px', color: K.textFaint, marginTop: '2px' }}>{row.sourceType}</div>
+                      <td style={tdBase}>
+                        <div style={{ fontSize: '12px', fontWeight: 500, color: K.textPrimary }}>{row.flag} {row.jurisdiction}</div>
+                        <div style={{ fontSize: '10px', color: K.textFaint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>{row.sourceTitle}</div>
                       </td>
-                      <td style={tdStyle}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
-                          <span style={{ fontSize: '15px' }}>{row.flag}</span>
-                          <span style={{ fontWeight: 500, color: K.textPrimary }}>{row.jurisdiction}</span>
+                      <td style={tdBase}>
+                        <div style={{ fontWeight: 500, color: K.textPrimary, fontSize: '12px' }}>{row.fieldName}</div>
+                        <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(0,0,0,0.04)', color: K.textFaint }}>{row.category}</span>
+                      </td>
+                      <td style={{ ...tdBase, maxWidth: '240px' }}>
+                        <span style={{ color: K.textPrimary, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: '11px' }}>
+                          {row.finalValue}
+                        </span>
+                        {wasEdited && <span style={{ fontSize: '10px', color: K.textFaint, marginLeft: '4px' }}>(edited)</span>}
+                        {row.comment && (
+                          <div style={{ fontSize: '10px', color: '#2563eb', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <MessageSquare size={8} /> {row.comment.length > 40 ? row.comment.slice(0, 40) + '\u2026' : row.comment}
+                          </div>
+                        )}
+                      </td>
+                      <td style={tdBase}><ConfidenceDot pct={row.confidence} /></td>
+                      <td style={tdBase}><Badge label={row.status} style={ss} /></td>
+                      <td style={{ ...tdBase, textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                          <button onClick={() => setEvidenceRecord(row)} title="View evidence" style={{ width: '26px', height: '26px', borderRadius: '5px', border: `1px solid ${K.accentBorder}`, background: K.accentSubtle, color: K.accentText, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Eye size={12} /></button>
+                          <button onClick={() => navigate(`/regulations/${row.sourceId}`)} title="Open detail view" style={{ width: '26px', height: '26px', borderRadius: '5px', border: `1px solid ${K.border}`, background: '#f8fafc', color: K.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={12} /></button>
+                          <button onClick={() => navigate(`/sources/${row.sourceId}`)} title="Open table view" style={{ width: '26px', height: '26px', borderRadius: '5px', border: `1px solid ${K.border}`, background: '#f8fafc', color: K.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileSpreadsheet size={12} /></button>
                         </div>
                       </td>
-                      <td style={tdStyle}>
-                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                          {row.products.map(p => (
-                            <span key={p} style={{ padding: '1px 6px', background: 'rgba(0,0,0,0.04)', border: `1px solid ${K.border}`, borderRadius: '4px', fontSize: '10px', color: K.textMuted, whiteSpace: 'nowrap' }}>{p}</span>
-                          ))}
-                        </div>
-                      </td>
-                      <td style={tdStyle}><Badge label={row.regStatus} style={rs} /></td>
-                      <td style={tdStyle}><Badge label={row.impact} style={is} /></td>
-                      <td style={{ ...tdStyle, color: K.textMuted, whiteSpace: 'nowrap' }}>{row.date}</td>
                     </tr>
                   );
                 })}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={7} style={{ padding: '48px', textAlign: 'center', color: K.textFaint, fontSize: '13px' }}>No records match your filters.</td></tr>
-                )}
               </tbody>
             </table>
 
+            {/* Footer */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', borderTop: `1px solid ${K.border}`, background: '#fafafa' }}>
               <span style={{ fontSize: '12px', color: K.textMuted }}>
                 {selected.size > 0 ? `${selected.size} of ${filtered.length} selected` : `${filtered.length} records`}
               </span>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={() => handleExport('CSV')} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 11px', background: '#fff', border: `1px solid ${K.border}`, borderRadius: '5px', fontSize: '11px', fontWeight: 500, color: K.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}><FileText size={11} /> Export CSV</button>
-                <button onClick={() => handleExport('Excel')} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 11px', background: K.accent, border: 'none', borderRadius: '5px', fontSize: '11px', fontWeight: 600, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}><FileSpreadsheet size={11} /> Export Excel</button>
-              </div>
+              <button onClick={() => setShowExportSummary(true)} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 11px', background: K.accent, border: 'none', borderRadius: '5px', fontSize: '11px', fontWeight: 600, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
+                <FileText size={11} /> Export CSV {selected.size > 0 && `(${selected.size})`}
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Create Alert modal */}
-      {showAlert && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.32)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowAlert(false)}>
-          <div style={{ background: '#fff', borderRadius: '12px', padding: '28px', width: '420px', boxShadow: '0 24px 60px rgba(0,0,0,0.15)', position: 'relative' }} onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowAlert(false)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: K.textFaint }}><X size={16} /></button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-              <div style={{ width: '36px', height: '36px', background: K.accentSubtle, border: `1px solid ${K.accentBorder}`, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Bell size={17} color={K.accent} /></div>
-              <div>
-                <h2 style={{ fontSize: '15px', fontWeight: 700, color: K.textPrimary, margin: 0 }}>Create Alert</h2>
-                <p style={{ fontSize: '11px', color: K.textMuted, margin: 0 }}>Notify when new records match your current filters</p>
-              </div>
-            </div>
-            <div style={{ marginBottom: '14px' }}>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: K.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' }}>Alert Name</label>
-              <input value={alertName} onChange={e => setAlertName(e.target.value)} placeholder="e.g. High Impact APAC Watch" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${K.inputBorder}`, borderRadius: '7px', fontSize: '13px', color: K.textPrimary, background: K.inputBg, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ marginBottom: '14px' }}>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: K.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' }}>Filter Conditions</label>
-              <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${K.border}`, borderRadius: '7px', fontSize: '12px', color: K.textSecondary, lineHeight: 1.7 }}>
-                {!hasFilters && <span style={{ color: K.textFaint }}>No filters active &mdash; alert will match all records</span>}
-                {jurisdiction !== 'All' && <div>Jurisdiction: <strong>{jurisdiction}</strong></div>}
-                {product !== 'All' && <div>Product: <strong>{product}</strong></div>}
-                {regStatus !== 'All' && <div>Status: <strong>{regStatus}</strong></div>}
-                {impact !== 'All' && <div>Sector Impact: <strong>{impact}</strong></div>}
-                {sourceType !== 'All' && <div>Source Type: <strong>{sourceType}</strong></div>}
-              </div>
-            </div>
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: K.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' }}>Frequency</label>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {['Immediate', 'Daily digest', 'Weekly summary'].map(f => (
-                  <button key={f} onClick={() => setAlertFreq(f)}
-                    style={{ flex: 1, padding: '6px', border: `1px solid ${alertFreq === f ? K.accentBorder : K.border}`, borderRadius: '6px', background: alertFreq === f ? K.accentSubtle : '#fff', color: alertFreq === f ? K.accentText : K.textSecondary, fontSize: '11px', fontWeight: alertFreq === f ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>{f}</button>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button onClick={() => setShowAlert(false)} style={{ flex: 1, padding: '9px', border: `1px solid ${K.border}`, borderRadius: '7px', background: '#fff', color: K.textSecondary, fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-              <button onClick={() => { setShowAlert(false); setAlertName(''); }} style={{ flex: 2, padding: '9px', border: 'none', borderRadius: '7px', background: K.accent, color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Create Alert</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Evidence drawer */}
+      {evidenceRecord && <EvidenceDrawer record={evidenceRecord} onClose={() => setEvidenceRecord(null)} />}
+
+      {/* Export summary */}
+      {showExportSummary && <ExportSummary records={recordsToExport} onClose={() => setShowExportSummary(false)} onConfirm={doExport} />}
     </div>
   );
 }

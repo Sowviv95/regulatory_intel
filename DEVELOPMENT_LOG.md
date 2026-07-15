@@ -304,6 +304,56 @@ Turn Regulation Review into a functional field-level review workflow with shared
 
 ---
 
+### Sprint 4 -- Search, Evidence and Export
+
+**Date:** 15 July 2026
+
+**Status:** Completed
+
+**Objective**
+Make Search & Export (Intelligence Library) functional with live review data, evidence inspection, and CSV export.
+
+**Changes implemented**
+- Intelligence Library now shows field-level records from the live review store (not static data)
+- Full-text search across: regulation title, source name, jurisdiction, document type, field name, extracted value, reviewed value, reviewer comment, evidence text, category
+- Filters: Jurisdiction, Category (topic), Review Status, Confidence Level (High/Medium/Low), Source
+- Sortable columns: Source/Jurisdiction, Field Name, Confidence, Status (click to toggle asc/desc/off)
+- Clear-all filters button
+- Row selection with checkboxes and select-all
+- Final Value column shows reviewedValue when present, extractedValue otherwise, with "(edited)" indicator
+- Evidence drawer (modal): shows source info, field details, extracted value, reviewed value (if different), immutable evidence text with green accent bar, confidence, status, reviewer comment
+- Export summary modal: shows record counts (total, sources, accepted, rejected, flagged, pending, missing evidence warning)
+- CSV export: generates and downloads a real CSV file with 16 columns
+- Navigation links per row: Evidence (drawer), Detail View (/regulations/:id), Table View (/sources/:id)
+- Empty state: "No records match your search or filters" vs "No field records available yet"
+- Added SearchableRecord type combining source + field data with finalValue
+- Search service now derives records from live review store via getFieldsForSource()
+- Exported CSV includes: Source ID, Source Title, Regulatory Body, Jurisdiction, Document Type, Date, Field ID, Field Name, Category, Extracted Value, Reviewed Value, Final Value, Review Status, Confidence %, Reviewer Comment, Evidence Reference
+
+**Files modified**
+- src/types/index.ts (added SearchableRecord interface)
+- src/services/search.ts (rebuilt with live data, field-level search, CSV generation, export summary)
+- src/app/components/SearchExport.tsx (rebuilt with evidence drawer, export summary, full filters, sorting)
+- DEVELOPMENT_LOG.md (added Sprint 4 entry)
+- docs/SPRINT_PLAN.md (marked Sprint 4 completed)
+
+**Validation performed**
+- `pnpm run build` -- succeeded, 1626 modules, 317 KB JS, 87 KB CSS
+- `git diff --check` -- no whitespace errors
+- Manual: search filters results across all fields, combined filters compose correctly, sort toggles work, row selection works, evidence drawer shows immutable evidence, export summary shows correct counts, CSV downloads with all 16 columns, reviewed values take precedence over extracted values, navigation links work
+
+**Known limitations**
+- Saved views remain UI-only (static list, not functional)
+- No Excel export (CSV only; Excel would require an additional dependency)
+- Alert creation modal removed (not functional without backend)
+- CSV includes UTF-8 BOM so non-English text (Chinese, Korean, etc.) opens correctly in Excel on Windows
+- No pagination (78 total field records across 6 sources)
+
+**Next steps**
+- Sprint 5: FastAPI and SQLite persistence
+
+---
+
 ## Sprint Tracking Template
 
 ### Sprint X – Sprint Name
