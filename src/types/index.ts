@@ -29,7 +29,9 @@ export type Likelihood = 'Speculative' | 'Likely' | 'Probable' | 'Confirmed';
 
 export type FieldCategory = 'Metadata' | 'Content' | 'Assessment' | 'Dates';
 
-export type FieldStatus = 'Pending' | 'Accepted' | 'Flagged';
+export type FieldStatus = 'Pending' | 'Accepted' | 'Rejected' | 'Flagged';
+
+export type ReviewDecisionType = 'Accepted' | 'Rejected' | 'Edited' | 'Flagged' | 'Reset';
 
 export type ExportFormat = 'CSV' | 'Excel';
 
@@ -134,6 +136,22 @@ export interface ReviewSource {
   docType: string;
   date: string;
   fields: RegulationFieldRow[];
+}
+
+// -- Reviewable field (shared review state) ---------------------------------
+
+export interface ReviewableField {
+  id: number;
+  sourceId: number;
+  category: string;
+  field: string;
+  extractedValue: string;
+  reviewedValue: string | null;
+  evidence: string;
+  confidence: number;
+  status: FieldStatus;
+  comment: string | null;
+  reviewedAt: string | null;
 }
 
 // -- Search / Intelligence Library ------------------------------------------

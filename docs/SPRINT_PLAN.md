@@ -88,6 +88,8 @@
 
 ## Sprint 3 -- Regulatory Review Workflow
 
+**Status:** Completed
+
 **Objective:** Connect both review screens (RegulationReview and RegulationReviewTable) to the shared data layer with full review functionality.
 
 **Scope:**

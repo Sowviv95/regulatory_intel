@@ -240,6 +240,70 @@ Make the Source Queue a functional workflow with search, filters, sorting, row s
 
 ---
 
+### Sprint 3 -- Regulatory Review Workflow
+
+**Date:** 15 July 2026
+
+**Status:** Completed
+
+**Objective**
+Turn Regulation Review into a functional field-level review workflow with shared state across both the single-regulation detail view and the review table.
+
+**Changes implemented**
+- Created shared mutable review state in services/regulations.ts (Map keyed by sourceId)
+- Both RegulationReview and RegulationReviewTable now read/write the same review store
+- Added ReviewableField type with extractedValue, reviewedValue, status, comment, reviewedAt
+- Added FieldStatus: Pending, Accepted, Rejected, Flagged (added Rejected)
+- Field-level actions: Accept, Reject, Flag, Edit value, Add comment, Reset
+- Accept All Pending button on both views
+- Prev/Next regulation navigation is functional across all 6 review sources
+- Unsaved-change protection via window.confirm when navigating with edit in progress
+- Confidence indicators: High (>=90%, green), Medium (>=75%, amber), Low (<75%, red)
+- Edited values show "(edited)" label; original extractedValue is preserved
+- Comments displayed inline with blue MessageSquare icon
+- Evidence panel shows per-field confidence bar with color coding
+- RegulationReviewTable now shows 5 KPI cards (Total, Accepted, Rejected, Flagged, Review Rate)
+- Source selector in table view shows review progress per source (e.g., "5/13 reviewed")
+- Reject button added alongside Accept, Flag in both views
+- Table View / Detail View buttons link between the two review screens
+- All review state persists across navigation within a session
+- Evidence remains immutable (read-only from data)
+
+**Files modified**
+- src/types/index.ts (added Rejected to FieldStatus, ReviewDecisionType, ReviewableField interface)
+- src/services/regulations.ts (rebuilt with shared review store, all field-level action functions, aggregate stats)
+- src/app/components/RegulationReview.tsx (rebuilt with full review workflow)
+- src/app/components/RegulationReviewTable.tsx (rebuilt to use shared review state, added reject/comment)
+- DEVELOPMENT_LOG.md (added Sprint 3 entry)
+
+**Validation performed**
+- `pnpm run build` -- succeeded, 1626 modules, 311 KB JS, 87 KB CSS
+- `git diff --check` -- no whitespace errors
+- Manual: Accept/Reject/Flag/Edit/Comment/Reset all functional in both views
+- Cross-screen: changes in RegulationReview are visible in RegulationReviewTable and vice versa
+- Prev/Next navigation works across all 6 sources
+- Invalid regulation ID shows ErrorState
+- Unsaved edit triggers confirmation dialog on navigation
+
+**Decisions**
+- Review state is a Map<sourceId, ReviewableField[]> in the service layer
+- Fields are lazily initialized when first accessed for a source
+- Rejected is a new distinct status (separate from Flagged) for explicit rejections
+- Evidence is never modified; it's read from the immutable data layer
+- Review stats (accepted, rejected, flagged, pending) computed on each read for simplicity
+
+**Known limitations**
+- Review state resets on page reload (in-memory only)
+- Source text and evidence map are shared across all 6 sources (only accurate for source 1 / Taiwan)
+- Highlight ranges in RegulationReview are hardcoded for the Taiwan source text
+- No bulk reject or bulk flag (only Accept All Pending)
+- Comments are single-value (replace, not append) -- will become a list in Sprint 5
+
+**Next steps**
+- Sprint 4: Search, evidence and export
+
+---
+
 ## Sprint Tracking Template
 
 ### Sprint X – Sprint Name
