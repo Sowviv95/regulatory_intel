@@ -1,150 +1,136 @@
 # Demo Runbook -- Regulatory Intelligence PoC
 
-**Status:** Provisional -- this runbook will be updated as the PoC matures
-**Date:** 15 July 2026
-**Sprint:** 0
+**Status:** Final (Sprint 8)
+**Date:** 16 July 2026
 
 ---
 
-## 1. Intended Demo Journey
+## 1. Demo Journey
 
 ```
 1. Dashboard
-   - Show KPI summary cards
-   - Highlight jurisdiction coverage
-   - Point out recent alerts with impact badges
-   - Click "View all" to go to Source Queue
+   - Show KPI summary: Total Sources, Ready for Review, High Impact, Review Progress
+   - Show stats bar: Regulations, Accepted, Rejected, Flagged, Low Confidence, Evidence
+   - Highlight jurisdiction coverage across 8 jurisdictions
+   - Click "Ready for Review" KPI to navigate to Source Queue
 
 2. Source Queue
-   - Show incoming regulatory documents across jurisdictions
-   - Switch between status tabs (New, Processing, Ready for Review)
-   - Click "Open Review" on a Ready for Review item
+   - Show all 66 sources across status tabs
+   - Filter by "Ready for Review" status (pre-filtered from dashboard)
+   - Point out imported Tamarind sources alongside demo sources
+   - Click a Tamarind-imported source to open Review Table
 
-3. Review Table (RegulationReviewTable)
-   - Show field-level review table for the selected source
-   - Point out categories, extracted values, source evidence, confidence scores
+3. Review Table
+   - Show 12 extracted fields with categories, values, evidence, confidence
    - Accept a field, flag a field, edit a field value
-   - Switch to a different source using the source selector
+   - Show the source selector to switch between sources
+   - Click "Detail View" to switch to 3-panel layout
 
-4. Regulation Review (single document view)
-   - Show 3-panel layout: source document, extracted fields, evidence
-   - Click a field to highlight the corresponding source text
-   - Show evidence panel with source excerpt and confidence
-   - Toggle edit mode, modify a field value
-   - Click Approve
+4. Regulation Review (3-panel)
+   - Sources with original text: show source document with line highlighting
+   - Imported sources: show "Original document text unavailable" with evidence in right panel
+   - Click fields to show evidence excerpts and confidence
+   - Accept All Pending to complete review
 
 5. Intelligence Library (Search & Export)
-   - Search for a regulation by keyword
-   - Apply filter chips (jurisdiction, product, impact)
-   - Select rows with checkboxes
-   - Export as CSV or Excel
+   - Search for reviewed records
+   - Filter by status (Accepted), confidence level, jurisdiction
+   - Select rows and export as CSV
+   - Show evidence drawer for a record
 
 6. Return to Dashboard
-   - Show that the workflow is circular and self-contained
+   - Refresh to see updated review progress
+   - Show accepted/flagged counts have changed
+   - Demonstrate the complete review lifecycle
 ```
 
-## 2. Required Startup Steps
+## 2. Startup
 
-### Current state (Sprint 0 -- frontend only)
+### Quick start (PowerShell)
 
-```bash
-cd "D:\Regulatory Intelligence"
-pnpm install
-pnpm run dev
-# Open http://localhost:5173 in Chrome or Edge
+```powershell
+# Full reset with Tamarind import
+.\scripts\reset-demo.ps1 -Import
+
+# Start both servers
+.\scripts\start-demo.ps1
+
+# Open http://localhost:5173
 ```
 
-### Future state (with backend)
+### Manual start
 
 ```bash
 # Terminal 1 -- Backend
-cd "D:\Regulatory Intelligence\backend"
+cd backend
 pip install -r requirements.txt
-python -m seed.sample_data      # Seed demo data
-python main.py                  # Start API on http://localhost:8000
+python main.py
+# API: http://localhost:8000
 
 # Terminal 2 -- Frontend
-cd "D:\Regulatory Intelligence"
 pnpm install
-pnpm run dev                    # Start UI on http://localhost:5173
+pnpm run dev
+# UI: http://localhost:5173
 ```
 
 ## 3. Expected Demo Data
 
-| Data Type           | Count | Source              |
-|---------------------|-------|---------------------|
-| Jurisdictions       | 6     | Taiwan, Denmark, Finland, Poland, South Korea, Vietnam |
-| Source documents     | 12    | Queue items with various statuses |
-| Detailed sources    | 6     | With full fields and evidence |
-| Regulatory fields   | 13    | Per source (Metadata, Content, Assessment, Dates) |
-| Search results      | 12    | Approved/Published regulations |
-| Saved views         | 5     | Pre-configured search views |
+| Data Type           | Count | Notes                                           |
+|---------------------|-------|-------------------------------------------------|
+| Total sources       | 66    | 12 seed + 54 Tamarind imported                  |
+| Jurisdictions       | 8     | Taiwan, Denmark, Finland, Poland, South Korea, Vietnam, UAE, plus seed countries |
+| Regulations         | 60    | 6 seed + 54 imported                            |
+| Fields per source   | 12-13 | 13 for seed, 12 for imported                    |
+| Total fields        | 726   | All with evidence records                       |
+| Evidence coverage   | 100%  | Every field has linked evidence                 |
 
-**Key demo regulation:** Taiwan -- Tobacco Hazards Prevention Act Amendment 2026
-- Full Chinese source text with line-level evidence linking
-- 13 extracted fields with confidence scores
-- Evidence highlighting in the source document panel
+**Key demo source:** Taiwan -- Tobacco Hazards Prevention Act Amendment 2026
+- Full Chinese source text with evidence highlighting
+- 13 extracted fields with high confidence scores
 
-## 4. Screens Covered
+## 4. Screens
 
-| Screen                | URL (future)           | Key Demo Points                          |
-|-----------------------|------------------------|------------------------------------------|
-| Dashboard             | `/`                    | KPIs, jurisdiction coverage, alerts      |
-| Source Queue           | `/sources`             | Status tabs, processing stages, actions  |
-| Regulation Review      | `/review/:id`          | 3-panel layout, evidence highlighting    |
-| Review Table           | `/review-table/:id`    | Field-level review, accept/flag/edit     |
-| Intelligence Library   | `/search`              | Search, filters, export                  |
+| Screen              | URL                      | Key Demo Points                          |
+|---------------------|--------------------------|------------------------------------------|
+| Dashboard           | `/`                      | Live KPIs, jurisdictions, activity       |
+| Source Queue         | `/sources`               | Status tabs, search, bulk actions        |
+| Review Table         | `/sources/:sourceId`     | Field-level review, accept/flag/edit     |
+| Regulation Review    | `/regulations/:id`       | 3-panel layout, evidence, source text    |
+| Intelligence Library | `/search`                | Search, filters, CSV export              |
 
-## 5. Known Placeholders
+## 5. Pre-Demo Validation
 
-| Feature                | Current State                          | Target State                          |
-|------------------------|----------------------------------------|---------------------------------------|
-| Dashboard KPIs         | Static hardcoded values                | Computed from database                |
-| Source Queue processing| Status changes are local state only    | Persisted to database                 |
-| Regulation approval    | Local state, resets on navigation      | Persisted to database                 |
-| Evidence confidence    | Static percentages                     | From Tamarind extraction output       |
-| Search                 | Client-side filter on static array     | Server-side full-text search          |
-| Export                 | Toast notification only                | Actual file download                  |
-| Saved views            | Static list, not persisted             | Saved to database                     |
-| Alerts                 | Modal only, not functional             | Alert system (future)                 |
-| Publish button         | No action                              | Status transition + notification      |
-| Refresh buttons        | No action                              | Reload data from API                  |
-| Prev/Next (review)     | Cycles through static sources          | Cycles through database records       |
-| Settings button        | No action                              | Settings panel (future/out of scope)  |
-| User profile (JL)      | Static display                         | Authentication (out of scope)         |
+```powershell
+.\scripts\validate-demo.ps1
+```
 
-## 6. Pre-Demo Validation Checklist
+Or manually:
 
-- [ ] `pnpm install` completed without errors
-- [ ] `pnpm run dev` starts successfully
-- [ ] Dashboard loads and shows all KPI cards
-- [ ] Source Queue shows 12 items across tabs
-- [ ] "Ready for Review" tab shows 4 items
-- [ ] Clicking "Open Review" navigates to Review Table
-- [ ] Review Table shows 13 fields for Taiwan source
-- [ ] Accept, Flag, Edit actions work on fields
-- [ ] Source selector dropdown opens and shows 6 sources
-- [ ] Intelligence Library shows 12 search results
-- [ ] Filter chips filter the results correctly
-- [ ] Export buttons show confirmation toast
+- [ ] `http://localhost:8000/api/health` returns `{"status": "ok"}`
+- [ ] Dashboard loads with live KPIs (not zeros)
+- [ ] Source Queue shows 66 sources
+- [ ] Review Table loads fields for an imported source
+- [ ] Search shows all field records
+- [ ] CSV export downloads successfully
 - [ ] No console errors in browser DevTools
-- [ ] Backend running (when applicable): `curl http://localhost:8000/api/health`
 
-## 7. Demo Tips
+## 6. Demo Tips
 
 - **Start on Dashboard** for context before diving into workflow
-- **Use Taiwan regulation** as primary example -- it has the richest data including Chinese source text
-- **Highlight evidence traceability** -- click fields to show source highlighting, then show evidence panel
-- **Show the confidence scores** -- demonstrate that lower-confidence fields can be flagged for review
-- **Use the Review Table** for bulk actions (Accept All) to show efficiency
-- **End with export** to show the complete intelligence lifecycle
+- **Use Taiwan regulation** for evidence highlighting (has full Chinese source text)
+- **Use a Tamarind import** (e.g., Poland or UAE) to show imported data without source text
+- **Highlight evidence traceability** -- click fields to show evidence excerpts and confidence
+- **Show review persistence** -- accept a field, refresh, confirm it persists
+- **Use the stats bar** to show field-level review progress at a glance
+- **End with CSV export** to show the complete intelligence lifecycle
 
-## 8. Troubleshooting
+## 7. Troubleshooting
 
 | Issue                      | Resolution                                    |
 |----------------------------|-----------------------------------------------|
-| `pnpm install` fails       | Delete `node_modules` and `pnpm-lock.yaml`, retry |
-| Port 5173 in use           | Kill the process or use `--port 5174`         |
-| Build fails on ARM64       | Ensure `@rollup/rollup-win32-arm64-msvc` and `lightningcss-win32-arm64-msvc` are in devDependencies |
-| Blank page on load         | Check browser console for errors; verify `src/main.tsx` exists |
-| Backend won't start        | Check Python version (3.10+); verify `requirements.txt` installed |
+| Port 5173 in use           | Kill the process or use `pnpm run dev -- --port 5174` |
+| Port 8000 in use           | Kill the process or change port in main.py    |
+| Database missing           | Run `.\scripts\reset-demo.ps1 -Import`        |
+| Backend won't start        | Check Python 3.10+; `pip install -r requirements.txt` |
+| Empty dashboard            | Database may not be seeded; run reset script   |
+| Build fails on ARM64       | Ensure ARM64 rollup/lightningcss devDeps present |

@@ -4,7 +4,7 @@ A proof-of-concept application for tracking, reviewing, and exporting tobacco an
 
 ## Current Status
 
-**Phase:** Sprint 6 -- Tamarind output ingestion complete
+**Phase:** Sprint 8 -- Demo hardening complete
 **Frontend:** React + Vite SPA connected to backend API
 **Backend:** FastAPI + SQLite (local-first, no cloud dependencies)
 
@@ -63,11 +63,12 @@ python -m backend.import_tamarind --input "path/to/Batch1.xlsx" --reset-imported
 
 ## Current Limitations
 
-- Settings, Publish, and Refresh buttons are non-functional placeholders
+- Publish and Settings buttons are non-functional placeholders
 - Single hardcoded user profile ("Jane Lee")
 - Only the Taiwan demo source has full original source text
 - No authentication or multi-user support
 - SPA fallback needed for production server (deep link refresh)
+- Saved views in Intelligence Library are static
 
 ## Documentation
 
@@ -81,6 +82,7 @@ python -m backend.import_tamarind --input "path/to/Batch1.xlsx" --reset-imported
 | [Tamarind Import](docs/TAMARIND_IMPORT_MAPPING.md)| Tamarind file mapping and import rules         |
 | [Sprint Plan](docs/SPRINT_PLAN.md)                | Sprint 0-8 plan with acceptance criteria       |
 | [Demo Runbook](docs/DEMO_RUNBOOK.md)              | Demo journey and setup instructions            |
+| [Release Checklist](docs/RELEASE_CHECKLIST.md)    | Pre-demo validation checklist                  |
 | [Development Log](DEVELOPMENT_LOG.md)             | Change log and sprint tracking                 |
 
 ## Repository Structure

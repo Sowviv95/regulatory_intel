@@ -1,8 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   ChevronDown, Check, X, XCircle, Edit2, Send, FileText, ChevronLeft, ChevronRight,
-  Highlighter, Tag, Info, Flag, MessageSquare, AlertTriangle,
+  Highlighter, Tag, Info, Flag, MessageSquare, AlertTriangle, FileQuestion,
 } from 'lucide-react';
 import { K, statusStyle } from './kiaa-tokens';
 import { Badge } from './KBadge';
@@ -91,7 +91,15 @@ export function RegulationReview() {
   const fields = regulation.fields ?? [];
   const stats = getReviewStats(fields);
   const sourceTextContent = regulation.sourceText ?? '';
+  const hasSourceText = sourceTextContent.trim().length > 0;
   const activeField = activeFieldId ? fields.find(f => f.id === activeFieldId) : null;
+
+  // Derive display metadata from source (review list) or regulation (API)
+  const displayFlag = source?.flag ?? regulation.flag ?? '';
+  const displayTitle = source?.title ?? regulation.title ?? 'Untitled';
+  const displaySourceName = source?.sourceName ?? regulation.sourceName ?? '';
+  const displayCountry = source?.country ?? regulation.country ?? '';
+  const displayDocType = source?.docType ?? regulation.docType ?? '';
 
   // Source text highlighting ranges (by field name)
   const highlightRanges = getHighlightRanges();
@@ -161,10 +169,10 @@ export function RegulationReview() {
           </div>
           <div>
             <h1 style={{ fontSize: '14px', fontWeight: 700, color: K.textPrimary, margin: 0, maxWidth: '500px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {source.flag} {source.title}
+              {displayFlag} {displayTitle}
             </h1>
             <div style={{ fontSize: '11px', color: K.textMuted, marginTop: '1px' }}>
-              {source.sourceName} &middot; {currentIdx + 1} of {allSources.length} &middot; {rate}% reviewed
+              {displaySourceName} &middot; {currentIdx >= 0 ? `${currentIdx + 1} of ${sourcesList.length}` : ''} &middot; {rate}% reviewed
             </div>
           </div>
         </div>
@@ -187,20 +195,30 @@ export function RegulationReview() {
           <div style={{ padding: '12px 16px', borderBottom: `1px solid ${K.border}`, background: '#fff', display: 'flex', alignItems: 'center', gap: '7px', flexShrink: 0 }}>
             <FileText size={13} style={{ color: K.textMuted }} />
             <span style={{ fontSize: '12px', fontWeight: 600, color: K.textPrimary }}>Source Document</span>
-            <span style={{ fontSize: '11px', color: K.textFaint, marginLeft: 'auto' }}>{source.country} &middot; {source.docType}</span>
+            <span style={{ fontSize: '11px', color: K.textFaint, marginLeft: 'auto' }}>{displayCountry} &middot; {displayDocType}</span>
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '16px', background: '#fff' }}>
-            <div style={{ fontSize: '11.5px', lineHeight: 1.9, color: K.textSecondary, whiteSpace: 'pre-wrap', fontFamily: "'Inter', system-ui, sans-serif" }}>
-              {sourceTextContent.split('\n').map((line, idx) => {
-                const range = activeField ? highlightRanges[activeField.field] : null;
-                const isHighlighted = range ? idx >= range[0] && idx <= range[1] : false;
-                return (
-                  <div key={idx} style={{ background: isHighlighted ? 'rgba(22,163,74,0.12)' : 'transparent', borderLeft: isHighlighted ? `3px solid ${K.accent}` : '3px solid transparent', paddingLeft: '6px', marginLeft: '-6px', transition: 'background 0.2s' }}>
-                    {line || ' '}
-                  </div>
-                );
-              })}
-            </div>
+            {hasSourceText ? (
+              <div style={{ fontSize: '11.5px', lineHeight: 1.9, color: K.textSecondary, whiteSpace: 'pre-wrap', fontFamily: "'Inter', system-ui, sans-serif" }}>
+                {sourceTextContent.split('\n').map((line, idx) => {
+                  const range = activeField ? highlightRanges[activeField.field] : null;
+                  const isHighlighted = range ? idx >= range[0] && idx <= range[1] : false;
+                  return (
+                    <div key={idx} style={{ background: isHighlighted ? 'rgba(22,163,74,0.12)' : 'transparent', borderLeft: isHighlighted ? `3px solid ${K.accent}` : '3px solid transparent', paddingLeft: '6px', marginLeft: '-6px', transition: 'background 0.2s' }}>
+                      {line || ' '}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '12px', color: K.textFaint }}>
+                <FileQuestion size={32} style={{ opacity: 0.4 }} />
+                <div style={{ fontSize: '13px', fontWeight: 600, color: K.textMuted }}>Original document text unavailable</div>
+                <div style={{ fontSize: '11px', textAlign: 'center', maxWidth: '240px', lineHeight: 1.5 }}>
+                  Extracted field values and evidence excerpts are shown in the panels to the right.
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

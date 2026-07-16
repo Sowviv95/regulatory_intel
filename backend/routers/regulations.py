@@ -1,7 +1,10 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from database import get_connection
 from datetime import datetime
+
+log = logging.getLogger("ri.review")
 
 router = APIRouter()
 
@@ -161,6 +164,7 @@ class ReviewBody(BaseModel):
 
 @router.post("/api/fields/{field_id}/review")
 def review_field(field_id: int, body: ReviewBody):
+    log.info(f"Review field={field_id} decision={body.decision}")
     conn = get_connection()
     row = conn.execute("SELECT * FROM regulation_fields WHERE id = ?", (field_id,)).fetchone()
     if not row:

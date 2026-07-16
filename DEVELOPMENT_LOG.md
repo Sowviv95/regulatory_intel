@@ -594,6 +594,72 @@ Make the Dashboard screen display real computed metrics from the database, inclu
 
 ---
 
+### Sprint 8 -- Demo Hardening
+
+**Date:** 16 July 2026
+
+**Status:** Completed
+
+**Objective**
+Harden the PoC for a stable customer demo with repeatable setup, structured logging, error handling, and validated demo journey.
+
+**Changes implemented**
+- Removed decorative dashboard filter bar (Country/Status/Product/Date dropdowns that were not wired)
+- Added "Original document text unavailable" placeholder for imported sources without source text
+- RegulationReview now falls back to regulation API data when source is not in review cache
+- Added React ErrorBoundary wrapping entire app
+- Added loading spinner with disabled state on Dashboard Refresh button
+- Renamed "Queue Ageing" to "Oldest Pending Sources" (accurate labelling)
+- Added structured backend logging (startup counts, review actions, HTTP errors)
+- Backend startup now logs database state: sources, regulations, fields, imported count
+- Review field endpoint logs each decision
+- Error-logging middleware for 4xx/5xx responses
+- Added CSS spin animation for loading indicator
+
+**Scripts added**
+- scripts/start-backend.ps1 -- start backend with dependency check
+- scripts/start-frontend.ps1 -- start frontend with dependency check
+- scripts/start-demo.ps1 -- start both, wait for backend health check
+- scripts/reset-demo.ps1 -- delete DB, re-seed, optionally import Tamarind (-Import flag)
+- scripts/validate-demo.ps1 -- automated demo readiness validation
+
+**Documentation added/updated**
+- docs/RELEASE_CHECKLIST.md (new)
+- docs/DEMO_RUNBOOK.md (rewritten for Sprint 8)
+- DEVELOPMENT_LOG.md, docs/SPRINT_PLAN.md, docs/ARCHITECTURE.md, README.md
+
+**Files added**
+- src/app/components/ErrorBoundary.tsx
+- scripts/start-backend.ps1, start-frontend.ps1, start-demo.ps1, reset-demo.ps1, validate-demo.ps1
+- docs/RELEASE_CHECKLIST.md
+
+**Files modified**
+- src/app/App.tsx (ErrorBoundary wrapper)
+- src/app/components/Dashboard.tsx (removed filter bar, refresh loading, renamed queue ageing)
+- src/app/components/RegulationReview.tsx (missing source text handling, display fallbacks)
+- src/styles/index.css (spin keyframes)
+- backend/main.py (structured logging, startup info, error middleware)
+- backend/routers/regulations.py (review action logging)
+- docs/DEMO_RUNBOOK.md (rewritten)
+
+**Validation performed**
+- 67 backend tests passing
+- Frontend build: succeeded, 301 KB JS, 87 KB CSS
+- Demo journey: Dashboard -> Source Queue -> Review Table -> Regulation Review -> Search -> Export -> Dashboard verified
+- Imported source without source text shows graceful placeholder
+- Taiwan source shows source text with highlighting
+- Review actions persist across backend restart
+- Empty database handled gracefully
+
+**Known limitations**
+- Saved views in Intelligence Library are static (not persisted)
+- Publish button is a placeholder (no publish workflow)
+- Settings button is a placeholder
+- User profile ("Jane Lee") is hardcoded
+- No real-time updates (manual refresh only)
+
+---
+
 ## Sprint Tracking Template
 
 ### Sprint X – Sprint Name

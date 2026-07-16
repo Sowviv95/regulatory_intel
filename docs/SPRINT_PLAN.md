@@ -238,25 +238,30 @@
 
 ## Sprint 8 -- Demo Hardening
 
+**Status:** Completed
+
 **Objective:** Polish the end-to-end demo experience and ensure reliability.
 
 **Scope:**
-- Validate the complete demo journey (Dashboard -> Source Queue -> Review -> Search -> Export)
-- Fix any visual inconsistencies or broken interactions
-- Ensure consistent demo data across all screens
-- Create/update DEMO_RUNBOOK.md with final instructions
-- Add pre-demo validation script
+- Remove decorative non-functional controls
+- Handle missing source text gracefully for imported records
+- Add React error boundary
+- Add structured backend logging
+- Create PowerShell startup/reset/validation scripts
+- Create RELEASE_CHECKLIST.md
+- Rewrite DEMO_RUNBOOK.md
+- Validate complete demo journey
+- Add refresh loading feedback
 - Test on Windows ARM64
-- Document known limitations and workarounds
-- Clean up any remaining unused code (if safe)
 
 **Acceptance criteria:**
 - Complete demo journey works without errors
-- Demo can be set up from scratch in under 5 minutes
-- Pre-demo validation script passes
+- Demo can be set up from scratch in under 5 minutes (reset-demo.ps1 -Import)
+- validate-demo.ps1 passes all checks
 - DEMO_RUNBOOK.md is complete and accurate
 - All documentation is current
-- Build succeeds on Windows ARM64
+- 67 backend tests passing
+- Frontend build succeeds on Windows ARM64
 
 **Dependencies:** Sprint 7 complete
 

@@ -6,9 +6,11 @@ import { RegulationReview } from './components/RegulationReview';
 import { RegulationReviewTable } from './components/RegulationReviewTable';
 import { SearchExport } from './components/SearchExport';
 import { NotFound } from './components/NotFound';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <div style={{
         display: 'flex',
@@ -33,5 +35,6 @@ export default function App() {
         </main>
       </div>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }

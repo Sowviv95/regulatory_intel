@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   TrendingUp, TrendingDown, Bell, Globe, Activity, Clock, CheckCircle2,
-  XCircle, Flag, AlertTriangle, RefreshCw, FileText, ShieldCheck,
+  XCircle, Flag, AlertTriangle, RefreshCw, FileText, ShieldCheck, Loader2,
 } from 'lucide-react';
 import { K, impactStyle, statusStyle } from './kiaa-tokens';
 import { Badge } from './KBadge';
@@ -12,6 +13,14 @@ import { useApi } from '../../services/useApi';
 export function Dashboard() {
   const navigate = useNavigate();
   const { data, loading, error, reload } = useApi(() => getDashboardData(), []);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    reload();
+    setTimeout(() => setRefreshing(false), 800);
+  };
 
   if (loading) return <LoadingState message="Loading dashboard\u2026" />;
   if (error || !data) return <ErrorState title="Failed to load dashboard" message={error ?? undefined} onRetry={reload} />;
@@ -38,8 +47,8 @@ export function Dashboard() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button onClick={reload} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', background: '#fff', border: `1px solid ${K.border}`, borderRadius: '6px', fontSize: '12px', fontWeight: 500, color: K.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
-            <RefreshCw size={13} /> Refresh
+          <button onClick={handleRefresh} disabled={refreshing} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', background: '#fff', border: `1px solid ${K.border}`, borderRadius: '6px', fontSize: '12px', fontWeight: 500, color: refreshing ? K.textFaint : K.textSecondary, cursor: refreshing ? 'default' : 'pointer', fontFamily: 'inherit', opacity: refreshing ? 0.7 : 1 }}>
+            {refreshing ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={13} />} {refreshing ? 'Refreshing\u2026' : 'Refresh'}
           </button>
           <button onClick={() => navigate('/sources')} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', background: '#fff', border: `1px solid ${K.border}`, borderRadius: '6px', fontSize: '12px', fontWeight: 500, color: K.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
             <Bell size={13} /> <span>Alerts</span> <span style={{ background: K.accent, color: '#fff', fontSize: '10px', fontWeight: 700, borderRadius: '9px', padding: '0 5px', marginLeft: '2px' }}>{alerts.length}</span>
@@ -230,7 +239,7 @@ export function Dashboard() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
               <Clock size={15} style={{ color: K.textMuted }} />
-              <h3 style={{ fontSize: '13px', fontWeight: 600, color: K.textPrimary, margin: 0 }}>Queue Ageing</h3>
+              <h3 style={{ fontSize: '13px', fontWeight: 600, color: K.textPrimary, margin: 0 }}>Oldest Pending Sources</h3>
             </div>
             <button
               onClick={() => navigate('/sources?status=New')}
