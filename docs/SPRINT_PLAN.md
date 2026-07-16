@@ -147,6 +147,8 @@
 
 ## Sprint 5 -- FastAPI and SQLite Persistence
 
+**Status:** Completed
+
 **Objective:** Introduce a FastAPI backend with SQLite database and connect the frontend to real API endpoints.
 
 **Scope:**

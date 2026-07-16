@@ -1,8 +1,9 @@
 # API Contract -- Regulatory Intelligence PoC
 
-**Status:** Draft -- proposed future API, not yet implemented
-**Date:** 15 July 2026
-**Sprint:** 0
+**Status:** Implemented (Sprint 5)
+**Date:** 16 July 2026
+
+Note: The schema now includes a `regulations` table between sources and fields, and a dedicated `evidence` table. Field-level review uses `/api/fields/{id}` endpoints. Compatibility routes at `/api/regulations/{id}/review` are retained.
 
 ---
 

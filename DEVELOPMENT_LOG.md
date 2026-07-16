@@ -354,6 +354,100 @@ Make Search & Export (Intelligence Library) functional with live review data, ev
 
 ---
 
+### Sprint 5 -- FastAPI and SQLite Persistence
+
+**Date:** 15 July 2026
+
+**Status:** Completed
+
+**Objective**
+Add a FastAPI + SQLite backend and migrate the frontend from in-memory stores to persistent API-backed services.
+
+**Phase 1 -- Backend**
+- Created backend/ directory with modular FastAPI application
+- SQLite database with 3 tables: sources, regulation_fields, review_decisions
+- Seed script populates 12 sources and 78 fields (6 sources x 13 fields each)
+- CORS configured for local Vite frontend (localhost:5173)
+- 14 API endpoints implemented (health, dashboard, sources CRUD, regulations CRUD, review, search, evidence, export)
+- Review decisions recorded in review_decisions audit table
+- Evidence remains immutable (read-only)
+- 28 backend tests covering all endpoints, CRUD, review workflow, search, export, persistence
+
+**Phase 2 -- Frontend migration**
+- Created api.ts client (get, patch, post, downloadFile helpers)
+- Created useApi hook for async data loading with loading/error/reload
+- All 4 service files rewritten to use API calls instead of in-memory stores
+- Dashboard, SourceQueue, RegulationReview, RegulationReviewTable, SearchExport updated with async loading
+- Loading and error states shown during API calls
+- Source status changes, review actions, comments, and edits now persist to SQLite
+- CSV export still works (client-side generation from API search results)
+
+**Backend structure**
+```
+backend/
+  main.py              # FastAPI app with lifespan, CORS
+  database.py          # SQLite connection, schema DDL
+  seed.py              # Demo data seeder
+  requirements.txt     # fastapi, uvicorn, pydantic, pytest, httpx
+  routers/
+    health.py          # GET /api/health
+    dashboard.py       # GET /api/dashboard
+    sources.py         # GET/PATCH /api/sources, GET /api/sources/{id}/regulations
+    regulations.py     # GET/PATCH /api/regulations, POST review, accept-all
+    search.py          # GET /api/search, GET /api/evidence, POST /api/exports
+  tests/
+    test_api.py        # 28 tests
+```
+
+**Files added**
+- backend/ (entire directory: main.py, database.py, seed.py, requirements.txt, routers/*, tests/*)
+- src/services/api.ts (fetch-based API client)
+- src/services/useApi.ts (async data loading hook)
+
+**Files modified**
+- .gitignore (added backend/data/, __pycache__/, *.pyc, .pytest_cache/)
+- src/services/dashboard.ts (async API call)
+- src/services/sources.ts (async API calls)
+- src/services/regulations.ts (async API calls, kept static source text/evidence)
+- src/services/search.ts (async API call, kept client-side CSV/sort)
+- src/app/components/Dashboard.tsx (useApi hook, loading/error states)
+- src/app/components/SourceQueue.tsx (useApi hook, async actions)
+- src/app/components/RegulationReview.tsx (useApi hook, async actions)
+- src/app/components/RegulationReviewTable.tsx (useApi hook, async actions)
+- src/app/components/SearchExport.tsx (useApi hook, async search)
+- DEVELOPMENT_LOG.md, docs/SPRINT_PLAN.md
+
+**Validation performed**
+- Backend tests: 28/28 passed
+- `pnpm run build`: succeeded, 311 KB JS, 87 KB CSS
+- `git diff --check`: no whitespace errors
+
+**Known limitations**
+- Source text and evidence map remain static (loaded from frontend data files, not from API)
+- No authentication or authorization
+- No migration framework (schema is created on startup)
+- Comments are single-value per field (not a threaded list)
+- Backend must be running for the frontend to work (no fallback to mock data)
+
+**Next steps**
+- Sprint 6: Tamarind output ingestion
+
+**Sprint 5 addendum -- Schema alignment with domain model (16 July 2026)**
+- Added `regulations` table between sources and fields (id, source_id, title, regulatory_body, jurisdiction, topic, summary, status, created_at, updated_at)
+- Added `evidence` table (id, source_id, regulation_id, field_id, excerpt, page_number, section, source_reference, immutable)
+- Updated `regulation_fields` to reference `regulation_id` (not only source_id)
+- Seed creates 12 sources, 6 regulations, 78 fields, 78 evidence records
+- Taiwan source text stored in sources.source_text column, served via API
+- Evidence served read-only via GET /api/evidence/{field_id}; no write endpoints exist
+- GET /api/sources/{id}/regulations now returns regulation records
+- GET /api/regulations/{id} returns regulation with fields and embedded evidence
+- Added dedicated field endpoints: GET/PATCH /api/fields/{id}, POST /api/fields/{id}/review
+- Compatibility routes retained: POST /api/regulations/{id}/review, POST /api/regulations/{id}/review/accept-all
+- Frontend regulation service rewritten to use /api/regulations/{id} for source text and evidence
+- 32 backend tests passing, including relationship chain validation, persistence restart, and evidence immutability
+
+---
+
 ## Sprint Tracking Template
 
 ### Sprint X – Sprint Name

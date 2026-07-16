@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router';
 import { TrendingUp, TrendingDown, Bell, Globe, ChevronDown, Filter, AlertTriangle, RefreshCw } from 'lucide-react';
 import { K, impactStyle, statusStyle } from './kiaa-tokens';
 import { Badge } from './KBadge';
+import { LoadingState, ErrorState } from './StateViews';
 import { getDashboardData } from '../../services/dashboard';
+import { useApi } from '../../services/useApi';
 
 function FilterDropdown({ label, options }: { label: string; options: string[] }) {
   const [open, setOpen] = useState(false);
@@ -51,7 +53,12 @@ function FilterDropdown({ label, options }: { label: string; options: string[] }
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const { kpis, jurisdictions, alerts } = getDashboardData();
+  const { data, loading, error, reload } = useApi(() => getDashboardData(), []);
+
+  if (loading) return <LoadingState message="Loading dashboard\u2026" />;
+  if (error || !data) return <ErrorState title="Failed to load dashboard" message={error ?? undefined} onRetry={reload} />;
+
+  const { kpis, jurisdictions, alerts } = data;
 
   return (
     <div style={{ padding: '24px', background: K.pageBg, minHeight: '100vh', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>

@@ -1,128 +1,22 @@
-import type { SearchableRecord, SavedView, FieldStatus } from '../types';
+import type { SearchableRecord, SavedView } from '../types';
+import { get, downloadFile } from './api';
 import { savedViews } from '../data/search';
-import { getReviewSources, getFieldsForSource } from './regulations';
 
-// ---------------------------------------------------------------------------
-// Build searchable records from live review data
-// ---------------------------------------------------------------------------
-
-export function getAllSearchableRecords(): SearchableRecord[] {
-  const sources = getReviewSources();
-  const records: SearchableRecord[] = [];
-  for (const src of sources) {
-    const fields = getFieldsForSource(src.id);
-    for (const f of fields) {
-      records.push({
-        sourceId: src.id,
-        sourceTitle: src.title,
-        sourceName: src.sourceName,
-        flag: src.flag,
-        jurisdiction: src.country,
-        docType: src.docType,
-        date: src.date,
-        fieldId: f.id,
-        fieldName: f.field,
-        category: f.category,
-        extractedValue: f.extractedValue,
-        reviewedValue: f.reviewedValue,
-        finalValue: f.reviewedValue ?? f.extractedValue,
-        evidence: f.evidence,
-        confidence: f.confidence,
-        status: f.status,
-        comment: f.comment,
-      });
-    }
-  }
-  return records;
+export async function searchRecords(filters: {
+  q?: string; jurisdiction?: string; category?: string;
+  status?: string; confidence?: string; source?: string;
+}): Promise<SearchableRecord[]> {
+  const params = new URLSearchParams();
+  if (filters.q) params.set('q', filters.q);
+  if (filters.jurisdiction && filters.jurisdiction !== 'All') params.set('jurisdiction', filters.jurisdiction);
+  if (filters.category && filters.category !== 'All') params.set('category', filters.category);
+  if (filters.status && filters.status !== 'All') params.set('status', filters.status);
+  if (filters.confidence && filters.confidence !== 'All') params.set('confidence', filters.confidence);
+  if (filters.source && filters.source !== 'All') params.set('source', filters.source);
+  const qs = params.toString();
+  const res = await get<{ data: SearchableRecord[] }>(`/api/search${qs ? '?' + qs : ''}`);
+  return res.data;
 }
-
-// ---------------------------------------------------------------------------
-// Filters
-// ---------------------------------------------------------------------------
-
-export interface SearchFilters {
-  q?: string;
-  jurisdiction?: string;
-  category?: string;
-  status?: string;
-  confidence?: string;
-  source?: string;
-  sortBy?: 'jurisdiction' | 'fieldName' | 'confidence' | 'status' | 'date';
-  sortDir?: 'asc' | 'desc';
-}
-
-export function searchRecords(filters: SearchFilters): SearchableRecord[] {
-  let results = getAllSearchableRecords();
-
-  // Text search
-  const q = (filters.q ?? '').toLowerCase();
-  if (q) {
-    results = results.filter(r =>
-      r.sourceTitle.toLowerCase().includes(q) ||
-      r.sourceName.toLowerCase().includes(q) ||
-      r.jurisdiction.toLowerCase().includes(q) ||
-      r.fieldName.toLowerCase().includes(q) ||
-      r.extractedValue.toLowerCase().includes(q) ||
-      (r.reviewedValue?.toLowerCase().includes(q) ?? false) ||
-      (r.comment?.toLowerCase().includes(q) ?? false) ||
-      r.evidence.toLowerCase().includes(q) ||
-      r.docType.toLowerCase().includes(q) ||
-      r.category.toLowerCase().includes(q),
-    );
-  }
-
-  // Jurisdiction
-  if (filters.jurisdiction && filters.jurisdiction !== 'All') {
-    results = results.filter(r => r.jurisdiction === filters.jurisdiction);
-  }
-
-  // Category (topic)
-  if (filters.category && filters.category !== 'All') {
-    results = results.filter(r => r.category === filters.category);
-  }
-
-  // Review status
-  if (filters.status && filters.status !== 'All') {
-    results = results.filter(r => r.status === filters.status);
-  }
-
-  // Confidence level
-  if (filters.confidence && filters.confidence !== 'All') {
-    if (filters.confidence === 'High')   results = results.filter(r => r.confidence >= 90);
-    if (filters.confidence === 'Medium') results = results.filter(r => r.confidence >= 75 && r.confidence < 90);
-    if (filters.confidence === 'Low')    results = results.filter(r => r.confidence < 75);
-  }
-
-  // Source
-  if (filters.source && filters.source !== 'All') {
-    results = results.filter(r => r.sourceTitle === filters.source);
-  }
-
-  // Sort
-  if (filters.sortBy) {
-    const dir = filters.sortDir === 'desc' ? -1 : 1;
-    results = [...results].sort((a, b) => {
-      let av: string | number, bv: string | number;
-      switch (filters.sortBy) {
-        case 'confidence': av = a.confidence; bv = b.confidence; break;
-        case 'jurisdiction': av = a.jurisdiction; bv = b.jurisdiction; break;
-        case 'fieldName': av = a.fieldName; bv = b.fieldName; break;
-        case 'status': av = a.status; bv = b.status; break;
-        case 'date': av = a.date; bv = b.date; break;
-        default: av = ''; bv = '';
-      }
-      if (av < bv) return -1 * dir;
-      if (av > bv) return 1 * dir;
-      return 0;
-    });
-  }
-
-  return results;
-}
-
-// ---------------------------------------------------------------------------
-// Aggregates for export summary
-// ---------------------------------------------------------------------------
 
 export function getExportSummary(records: SearchableRecord[]) {
   return {
@@ -135,10 +29,6 @@ export function getExportSummary(records: SearchableRecord[]) {
     sources: new Set(records.map(r => r.sourceId)).size,
   };
 }
-
-// ---------------------------------------------------------------------------
-// CSV export
-// ---------------------------------------------------------------------------
 
 export function generateCsv(records: SearchableRecord[]): string {
   const headers = [
@@ -171,21 +61,21 @@ export function downloadCsv(csv: string, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-// ---------------------------------------------------------------------------
-// Filter option helpers
-// ---------------------------------------------------------------------------
-
 export function getUniqueJurisdictions(): string[] {
-  return [...new Set(getReviewSources().map(s => s.country))].sort();
+  return ['Taiwan', 'South Korea', 'Vietnam', 'Denmark', 'Finland', 'Poland'];
 }
 
 export function getUniqueSourceTitles(): string[] {
-  return getReviewSources().map(s => s.title);
+  // Static for now — these match the review sources
+  return [
+    'Tobacco Hazards Prevention Act \u2014 Amendment 2026',
+    'Electronic Cigarette Content Disclosure Rules Update',
+    'Nicotine Pouch Maximum Strength Regulation',
+    'Tobacco Control Law Phase 3 Implementation Decree',
+    'E-cigarette Point-of-Sale Display Restrictions',
+    'Heated Tobacco Product Labeling Requirements',
+  ];
 }
-
-// ---------------------------------------------------------------------------
-// Saved views (UI-only, static)
-// ---------------------------------------------------------------------------
 
 export function getSavedViews(): SavedView[] {
   return savedViews;

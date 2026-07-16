@@ -4,11 +4,11 @@ A proof-of-concept application for tracking, reviewing, and exporting tobacco an
 
 ## Current Status
 
-**Phase:** Sprint 0 -- Audit and documentation complete
-**Frontend:** React + Vite SPA with static mock data
-**Backend:** Not yet implemented (planned: FastAPI + SQLite)
+**Phase:** Sprint 5 -- FastAPI + SQLite persistence complete
+**Frontend:** React + Vite SPA connected to backend API
+**Backend:** FastAPI + SQLite (local-first, no cloud dependencies)
 
-The UI was exported from [Figma Make](https://www.figma.com/design/Wh2ZFOMvruYZIRTRQhpG2V/Regulatory-Intelligence-Prototype) and has been stabilised for Windows ARM64 builds. All screens use static/mock data and local component state. No backend, database, or AI extraction logic exists yet.
+The UI was exported from [Figma Make](https://www.figma.com/design/Wh2ZFOMvruYZIRTRQhpG2V/Regulatory-Intelligence-Prototype) and has been stabilised for Windows ARM64 builds. All review actions, status changes, and comments now persist to SQLite.
 
 ## Technology Stack
 
@@ -18,29 +18,38 @@ The UI was exported from [Figma Make](https://www.figma.com/design/Wh2ZFOMvruYZI
 | UI library | shadcn/ui components (installed, not yet active)    |
 | Icons      | Lucide React                                        |
 | Styling    | Inline React styles + KIAA design tokens            |
-| Backend    | FastAPI (planned)                                   |
-| Database   | SQLite (planned)                                    |
-| Language   | TypeScript (frontend), Python (backend, planned)    |
+| Backend    | FastAPI 0.115+, Python 3.10+                       |
+| Database   | SQLite (local file, WAL mode)                       |
+| Language   | TypeScript (frontend), Python (backend)              |
 
 ## Prerequisites
 
 - **Node.js** 18+ (LTS recommended)
 - **pnpm** 9+ (`npm install -g pnpm`)
+- **Python** 3.10+ with pip
 - **Windows ARM64 note:** The project includes native ARM64 dependencies for Rollup and LightningCSS. These are already configured in `package.json` devDependencies.
 
 ## Getting Started
 
 ```bash
-# Install dependencies
-pnpm install
+# Terminal 1 -- Backend
+cd backend
+pip install -r requirements.txt
+python main.py
+# API running on http://localhost:8000
 
-# Start development server
+# Terminal 2 -- Frontend
+pnpm install
 pnpm run dev
 # Open http://localhost:5173
 
-# Production build
+# Production build (frontend only)
 pnpm run build
 # Output: dist/
+
+# Run backend tests
+cd backend
+python -m pytest tests/ -v
 ```
 
 ## Current Limitations

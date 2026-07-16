@@ -6,11 +6,9 @@ import {
 } from 'lucide-react';
 import { K, statusStyle } from './kiaa-tokens';
 import { Badge } from './KBadge';
-import {
-  getSources, getFilteredSources, getSourceCountsByStatus,
-  getUniqueCountries, getUniqueDocTypes,
-  updateSourceStatus, updateAllNewToProcessing, bulkUpdateStatus,
-} from '../../services/sources';
+import { LoadingState, ErrorState } from './StateViews';
+import { getSources, updateSourceStatus, bulkUpdateStatus } from '../../services/sources';
+import { useApi } from '../../services/useApi';
 import type { Source, SourceStatus, ProcessingStage } from '../../types';
 
 const ALL_TABS: SourceStatus[] = ['New', 'Processing', 'Ready for Review', 'Irrelevant'];
@@ -157,8 +155,6 @@ function DetailPanel({ source, onClose }: { source: Source; onClose: () => void 
 
 export function SourceQueue() {
   const navigate = useNavigate();
-  const [, setTick] = useState(0);
-  const refresh = useCallback(() => setTick(t => t + 1), []);
 
   // Filters
   const [activeTab, setActiveTab] = useState<SourceStatus | 'All'>('All');
@@ -172,31 +168,49 @@ export function SourceQueue() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [detailSource, setDetailSource] = useState<Source | null>(null);
 
-  const countries = getUniqueCountries();
-  const docTypes = getUniqueDocTypes();
-  const counts = getSourceCountsByStatus();
+  // Load all sources from API, filter client-side for tabs/search
+  const { data: allRows, loading, error, reload } = useApi(
+    () => getSources({ country: countryFilter, docType: docTypeFilter, q: query || undefined }),
+    [query, countryFilter, docTypeFilter],
+  );
 
-  const filtered = getFilteredSources({
-    q: query,
-    status: activeTab === 'All' ? undefined : activeTab,
-    country: countryFilter,
-    docType: docTypeFilter,
-    sortBy: sortBy ?? undefined,
-    sortDir,
-  });
+  if (loading) return <LoadingState message="Loading sources\u2026" />;
+  if (error || !allRows) return <ErrorState title="Failed to load sources" message={error ?? undefined} onRetry={reload} />;
 
-  const allRows = getSources();
-  const activeJobs = allRows.filter(r => r.status === 'Processing').length;
-  const readyForReview = allRows.filter(r => r.status === 'Ready for Review').length;
+  // Tab counts from full dataset
+  const counts: Record<string, number> = { New: 0, Processing: 0, 'Ready for Review': 0, Irrelevant: 0 };
+  for (const r of allRows) if (r.status in counts) counts[r.status]++;
+
+  // Tab filter
+  let filtered = activeTab === 'All' ? allRows : allRows.filter(r => r.status === activeTab);
+
+  // Client-side sort
+  if (sortBy) {
+    const dir = sortDir === 'desc' ? -1 : 1;
+    filtered = [...filtered].sort((a, b) => {
+      const av = a[sortBy]; const bv = b[sortBy];
+      return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+    });
+  }
+
+  const activeJobs = counts['Processing'];
+  const readyForReview = counts['Ready for Review'];
   const failures = allRows.filter(r => r.failureMessage).length;
 
-  // Actions
-  const act = (fn: () => void) => { fn(); setSelected(new Set()); refresh(); };
+  // Async actions
+  const act = async (fn: () => Promise<unknown>) => {
+    await fn();
+    setSelected(new Set());
+    reload();
+  };
   const startProcessing = (id: number) => act(() => updateSourceStatus(id, 'Processing', 'Translating'));
   const markIrrelevant = (id: number) => act(() => updateSourceStatus(id, 'Irrelevant', 'Discarded'));
   const retry = (id: number) => act(() => updateSourceStatus(id, 'Processing', 'AI Extraction'));
   const restore = (id: number) => act(() => updateSourceStatus(id, 'New', 'Awaiting Extraction'));
-  const processAll = () => act(() => updateAllNewToProcessing());
+  const processAll = () => act(async () => {
+    const newSources = filtered.filter(s => s.status === 'New');
+    await Promise.all(newSources.map(s => updateSourceStatus(s.id, 'Processing', 'Translating')));
+  });
   const bulkProcess = () => act(() => bulkUpdateStatus([...selected], 'Processing', 'Translating'));
   const bulkIrrelevant = () => act(() => bulkUpdateStatus([...selected], 'Irrelevant', 'Discarded'));
 

@@ -7,11 +7,12 @@ import {
 } from 'lucide-react';
 import { K } from './kiaa-tokens';
 import { Badge } from './KBadge';
+import { LoadingState, ErrorState } from './StateViews';
 import {
   searchRecords, getSavedViews, getUniqueJurisdictions, getUniqueSourceTitles,
   generateCsv, downloadCsv, getExportSummary,
-  type SearchFilters,
 } from '../../services/search';
+import { useApi } from '../../services/useApi';
 import type { SearchableRecord, FieldStatus } from '../../types';
 
 // ---------------------------------------------------------------------------
@@ -204,7 +205,7 @@ export function SearchExport() {
   const [status, setStatus] = useState('All');
   const [confidence, setConfidence] = useState('All');
   const [source, setSource] = useState('All');
-  const [sortBy, setSortBy] = useState<SearchFilters['sortBy']>(undefined);
+  const [sortBy, setSortBy] = useState<'jurisdiction' | 'fieldName' | 'confidence' | 'status' | 'date' | undefined>(undefined);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // UI state
@@ -218,7 +219,32 @@ export function SearchExport() {
   const sourceTitles = getUniqueSourceTitles();
   const savedViews = getSavedViews();
 
-  const filtered = searchRecords({ q: query, jurisdiction, category, status, confidence, source, sortBy, sortDir });
+  const { data: filtered, loading, error, reload } = useApi(
+    () => searchRecords({ q: query, jurisdiction, category, status, confidence, source }),
+    [query, jurisdiction, category, status, confidence, source],
+  );
+
+  if (loading) return <LoadingState message="Searching records\u2026" />;
+  if (error || !filtered) return <ErrorState title="Search failed" message={error ?? undefined} onRetry={reload} />;
+
+  // Client-side sort
+  let sorted = filtered;
+  if (sortBy) {
+    const dir = sortDir === 'desc' ? -1 : 1;
+    sorted = [...filtered].sort((a, b) => {
+      let av: string | number, bv: string | number;
+      switch (sortBy) {
+        case 'confidence': av = a.confidence; bv = b.confidence; break;
+        case 'jurisdiction': av = a.jurisdiction; bv = b.jurisdiction; break;
+        case 'fieldName': av = a.fieldName; bv = b.fieldName; break;
+        case 'status': av = a.status; bv = b.status; break;
+        case 'date': av = a.date; bv = b.date; break;
+        default: av = ''; bv = '';
+      }
+      return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+    });
+  }
+  const displayRecords = sorted;
 
   // Selection uses composite key sourceId:fieldId
   const recordKey = (r: SearchableRecord) => `${r.sourceId}:${r.fieldId}`;
@@ -226,9 +252,9 @@ export function SearchExport() {
     const k = recordKey(r);
     setSelected(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
   };
-  const toggleAll = () => {
-    if (selected.size === filtered.length && filtered.length > 0) setSelected(new Set());
-    else setSelected(new Set(filtered.map(recordKey)));
+  const toggleAllRows = () => {
+    if (selected.size === displayRecords.length && displayRecords.length > 0) setSelected(new Set());
+    else setSelected(new Set(displayRecords.map(recordKey)));
   };
 
   const hasFilters = [jurisdiction, category, status, confidence, source].some(v => v !== 'All');
@@ -248,8 +274,8 @@ export function SearchExport() {
 
   // Export
   const recordsToExport = selected.size > 0
-    ? filtered.filter(r => selected.has(recordKey(r)))
-    : filtered;
+    ? displayRecords.filter(r => selected.has(recordKey(r)))
+    : displayRecords;
   const doExport = () => {
     const csv = generateCsv(recordsToExport);
     downloadCsv(csv, `regulatory-intelligence-export-${Date.now()}.csv`);
@@ -308,7 +334,7 @@ export function SearchExport() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div>
               <h1 style={{ fontSize: '18px', fontWeight: 800, color: K.textPrimary, margin: 0 }}>Intelligence Library</h1>
-              <p style={{ fontSize: '11px', color: K.textMuted, marginTop: '2px' }}>{filtered.length} field records across {new Set(filtered.map(r => r.sourceId)).size} sources</p>
+              <p style={{ fontSize: '11px', color: K.textMuted, marginTop: '2px' }}>{displayRecords.length} field records across {new Set(displayRecords.map(r => r.sourceId)).size} sources</p>
             </div>
             <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
               {exported && (
@@ -353,7 +379,7 @@ export function SearchExport() {
               <thead>
                 <tr>
                   <th style={{ ...thBase, width: '34px' }}>
-                    <input type="checkbox" checked={selected.size === filtered.length && filtered.length > 0} onChange={toggleAll} style={{ cursor: 'pointer' }} />
+                    <input type="checkbox" checked={selected.size === displayRecords.length && displayRecords.length > 0} onChange={toggleAllRows} style={{ cursor: 'pointer' }} />
                   </th>
                   <th style={{ ...thBase, cursor: 'pointer' }} onClick={() => toggleSort('jurisdiction')}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>Source <SortIcon col="jurisdiction" /></span>
@@ -372,14 +398,14 @@ export function SearchExport() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 && (
+                {displayRecords.length === 0 && (
                   <tr>
                     <td colSpan={7} style={{ padding: '48px', textAlign: 'center', color: K.textFaint, fontSize: '13px' }}>
                       {query || hasFilters ? 'No records match your search or filters.' : 'No field records available yet.'}
                     </td>
                   </tr>
                 )}
-                {filtered.map((row, i) => {
+                {displayRecords.map((row, i) => {
                   const k = recordKey(row);
                   const isSel = selected.has(k);
                   const ss = fieldStatusStyle(row.status);
@@ -430,7 +456,7 @@ export function SearchExport() {
             {/* Footer */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', borderTop: `1px solid ${K.border}`, background: '#fafafa' }}>
               <span style={{ fontSize: '12px', color: K.textMuted }}>
-                {selected.size > 0 ? `${selected.size} of ${filtered.length} selected` : `${filtered.length} records`}
+                {selected.size > 0 ? `${selected.size} of ${displayRecords.length} selected` : `${displayRecords.length} records`}
               </span>
               <button onClick={() => setShowExportSummary(true)} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 11px', background: K.accent, border: 'none', borderRadius: '5px', fontSize: '11px', fontWeight: 600, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
                 <FileText size={11} /> Export CSV {selected.size > 0 && `(${selected.size})`}

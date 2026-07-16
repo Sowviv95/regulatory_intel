@@ -12,3 +12,7 @@ Thumbs.db
 .idea/
 coverage/
 .claude/
+backend/data/
+__pycache__/
+*.pyc
+.pytest_cache/

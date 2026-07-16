@@ -6,12 +6,14 @@ import {
 } from 'lucide-react';
 import { K, statusStyle } from './kiaa-tokens';
 import { Badge } from './KBadge';
-import { ErrorState } from './StateViews';
+import { LoadingState, ErrorState } from './StateViews';
 import {
-  getReviewSources, getReviewSourceById, getSourceText, getEvidenceMap,
-  getFieldsForSource, acceptField, rejectField, flagField, resetField,
+  getReviewSources, getReviewSourceById, getRegulationById, getHighlightRanges,
+  acceptField, rejectField, flagField, resetField,
   editFieldValue, addFieldComment, acceptAllFields, getReviewStats,
+  type RegulationResponse,
 } from '../../services/regulations';
+import { useApi } from '../../services/useApi';
 import type { ReviewableField, FieldStatus } from '../../types';
 
 // ---------------------------------------------------------------------------
@@ -53,9 +55,6 @@ export function RegulationReview() {
   const sourceId = Number(regulationId) || 0;
   const source = getReviewSourceById(sourceId);
 
-  const [, setTick] = useState(0);
-  const refresh = useCallback(() => setTick(t => t + 1), []);
-
   const [activeFieldId, setActiveFieldId] = useState<number | null>(null);
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -75,26 +74,20 @@ export function RegulationReview() {
     );
   }
 
-  const fields = getFieldsForSource(sourceId);
-  const stats = getReviewStats(sourceId);
-  const sourceTextContent = getSourceText(sourceId);
-  const evMap = getEvidenceMap(sourceId);
+  const { data: regulation, loading: regLoading, error: regError, reload } = useApi(
+    () => getRegulationById(sourceId), [sourceId],
+  );
+
+  if (regLoading) return <LoadingState message="Loading regulation\u2026" />;
+  if (regError || !regulation) return <ErrorState title="Failed to load regulation" message={regError ?? undefined} onRetry={reload} />;
+
+  const fields = regulation.fields ?? [];
+  const stats = getReviewStats(fields);
+  const sourceTextContent = regulation.sourceText ?? '';
   const activeField = activeFieldId ? fields.find(f => f.id === activeFieldId) : null;
 
-  // Map field names to evidence keys (for the evidence panel)
-  const fieldToEvKey: Record<string, string> = {
-    Title: 'title', Summary: 'summary', 'Products Impacted': 'products',
-    'Sector Impact': 'sectorImpact', 'Effective Date': 'effectiveDate',
-    'Comment Deadline': 'commentDeadline',
-  };
-  const evKey = activeField ? fieldToEvKey[activeField.field] : null;
-  const evidence = evKey ? evMap[evKey] : null;
-
-  // Source text highlighting ranges (by evidence key)
-  const highlightRanges: Record<string, [number, number]> = {
-    title: [2, 4], summary: [11, 15], products: [18, 20],
-    sectorImpact: [41, 42], effectiveDate: [45, 46], commentDeadline: [49, 50],
-  };
+  // Source text highlighting ranges (by field name)
+  const highlightRanges = getHighlightRanges();
 
   // Prev/next navigation
   const currentIdx = allSources.findIndex(s => s.id === sourceId);
@@ -117,19 +110,19 @@ export function RegulationReview() {
   };
 
   // Actions
-  const doAccept = (fid: number) => { acceptField(sourceId, fid); refresh(); };
-  const doReject = (fid: number) => { rejectField(sourceId, fid); refresh(); };
-  const doFlag = (fid: number) => { flagField(sourceId, fid); refresh(); };
-  const doReset = (fid: number) => { resetField(sourceId, fid); refresh(); };
+  const doAccept = async (fid: number) => { await acceptField(sourceId, fid); reload(); };
+  const doReject = async (fid: number) => { await rejectField(sourceId, fid); reload(); };
+  const doFlag = async (fid: number) => { await flagField(sourceId, fid); reload(); };
+  const doReset = async (fid: number) => { await resetField(sourceId, fid); reload(); };
   const startEdit = (f: ReviewableField) => {
     setEditingFieldId(f.id);
     setEditValue(f.reviewedValue ?? f.extractedValue);
   };
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (editingFieldId !== null) {
-      editFieldValue(sourceId, editingFieldId, editValue);
+      await editFieldValue(sourceId, editingFieldId, editValue);
       setEditingFieldId(null);
-      refresh();
+      reload();
     }
   };
   const cancelEdit = () => setEditingFieldId(null);
@@ -137,14 +130,14 @@ export function RegulationReview() {
     setCommentFieldId(fid);
     setCommentText(existing ?? '');
   };
-  const saveComment = () => {
+  const saveComment = async () => {
     if (commentFieldId !== null) {
-      addFieldComment(sourceId, commentFieldId, commentText);
+      await addFieldComment(sourceId, commentFieldId, commentText);
       setCommentFieldId(null);
-      refresh();
+      reload();
     }
   };
-  const doAcceptAll = () => { acceptAllFields(sourceId); refresh(); };
+  const doAcceptAll = async () => { await acceptAllFields(sourceId); reload(); };
 
   const rate = stats.total > 0 ? Math.round(((stats.accepted + stats.rejected) / stats.total) * 100) : 0;
   const allReviewed = stats.pending === 0 && stats.total > 0;
@@ -192,7 +185,7 @@ export function RegulationReview() {
           <div style={{ flex: 1, overflow: 'auto', padding: '16px', background: '#fff' }}>
             <div style={{ fontSize: '11.5px', lineHeight: 1.9, color: K.textSecondary, whiteSpace: 'pre-wrap', fontFamily: "'Inter', system-ui, sans-serif" }}>
               {sourceTextContent.split('\n').map((line, idx) => {
-                const range = evKey ? highlightRanges[evKey] : null;
+                const range = activeField ? highlightRanges[activeField.field] : null;
                 const isHighlighted = range ? idx >= range[0] && idx <= range[1] : false;
                 return (
                   <div key={idx} style={{ background: isHighlighted ? 'rgba(22,163,74,0.12)' : 'transparent', borderLeft: isHighlighted ? `3px solid ${K.accent}` : '3px solid transparent', paddingLeft: '6px', marginLeft: '-6px', transition: 'background 0.2s' }}>
@@ -322,15 +315,15 @@ export function RegulationReview() {
             <span style={{ fontSize: '12px', fontWeight: 600, color: K.textPrimary }}>Field Evidence</span>
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
-            {activeField && evidence ? (
+            {activeField && (activeField as any).evidence ? (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
                   <span style={{ padding: '2px 8px', background: K.accentSubtle, border: `1px solid ${K.accentBorder}`, borderRadius: '4px', fontSize: '10px', fontWeight: 600, color: K.accentText, textTransform: 'uppercase' }}>{activeField.field}</span>
-                  <span style={{ fontSize: '10px', color: K.textFaint }}>{evidence.lines}</span>
+                  {(activeField as any).evidenceSection && <span style={{ fontSize: '10px', color: K.textFaint }}>{(activeField as any).evidenceSection}</span>}
                 </div>
                 <div style={{ padding: '14px', background: 'rgba(22,163,74,0.06)', border: `1px solid ${K.accentBorder}`, borderRadius: '8px', fontSize: '12px', lineHeight: 1.7, color: K.textSecondary, position: 'relative' }}>
                   <div style={{ width: '3px', position: 'absolute', left: 0, top: 0, bottom: 0, background: K.accent, borderRadius: '3px 0 0 3px' }} />
-                  {evidence.text}
+                  {(activeField as any).evidence}
                 </div>
                 <div style={{ marginTop: '12px', padding: '10px 12px', background: '#fafafa', border: `1px solid ${K.border}`, borderRadius: '7px' }}>
                   <div style={{ fontSize: '10px', fontWeight: 600, color: K.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Confidence</div>

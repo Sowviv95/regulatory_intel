@@ -2,12 +2,13 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react
 import { useParams, useNavigate } from 'react-router';
 import { Check, Flag, Edit2, ChevronLeft, ChevronRight, ChevronDown, Send, RotateCcw, Search, X, XCircle, MessageSquare } from 'lucide-react';
 import { K } from './kiaa-tokens';
-import { EmptyState, ErrorState } from './StateViews';
+import { LoadingState, EmptyState, ErrorState } from './StateViews';
 import {
   getReviewSources, getReviewSourceById, getFieldsForSource,
   acceptField, rejectField, flagField, resetField, editFieldValue,
   addFieldComment, acceptAllFields, getReviewStats,
 } from '../../services/regulations';
+import { useApi } from '../../services/useApi';
 import type { ReviewSource, ReviewableField, FieldStatus } from '../../types';
 
 const categories = ['All', 'Metadata', 'Content', 'Assessment', 'Dates'];
@@ -116,7 +117,7 @@ function SourceSearch({ selected, onSelect }: { selected: ReviewSource; onSelect
               <div style={{ padding: '20px', textAlign: 'center', color: K.textFaint, fontSize: '12px' }}>No matching sources</div>
             ) : matches.map(s => {
               const isActive = s.id === selected.id;
-              const stats = getReviewStats(s.id);
+              // stats would require async call; show date instead
               return (
                 <button key={s.id} onClick={() => { onSelect(s); setOpen(false); setQuery(''); }} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', width: '100%', padding: '10px 14px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: isActive ? K.accentSubtle : 'transparent', borderLeft: `3px solid ${isActive ? K.accent : 'transparent'}`, textAlign: 'left', transition: 'background 0.1s' }}
                   onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = '#f8fafc'; }}
@@ -125,7 +126,7 @@ function SourceSearch({ selected, onSelect }: { selected: ReviewSource; onSelect
                   <span style={{ fontSize: '18px', flexShrink: 0, lineHeight: 1.3 }}>{s.flag}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '12px', fontWeight: isActive ? 600 : 500, color: isActive ? K.accentText : K.textPrimary, lineHeight: 1.35 }}>{s.title}</div>
-                    <div style={{ fontSize: '11px', color: K.textMuted, marginTop: '2px' }}>{s.country} &middot; {s.docType} &middot; {stats.accepted}/{stats.total} reviewed</div>
+                    <div style={{ fontSize: '11px', color: K.textMuted, marginTop: '2px' }}>{s.country} &middot; {s.docType} &middot; {s.date}</div>
                   </div>
                   {isActive && <Check size={13} style={{ color: K.accent, flexShrink: 0, marginTop: '2px' }} />}
                 </button>
@@ -164,8 +165,6 @@ export function RegulationReviewTable() {
   const [selectedSource, setSelectedSource] = useState<ReviewSource>(startSource);
   const [catFilter, setCatFilter]           = useState('All');
   const [statusFilter, setStatusFilter]     = useState('All Statuses');
-  const [, setTick]                         = useState(0);
-  const refresh = useCallback(() => setTick(t => t + 1), []);
 
   useLayoutEffect(() => {
     if (!initialSourceId) return;
@@ -190,26 +189,31 @@ export function RegulationReviewTable() {
     setEditingId(null);
     setCommentId(null);
     navigate(`/sources/${s.id}`, { replace: true });
-    refresh();
   };
 
   const currentIdx = allSources.findIndex(s => s.id === selectedSource.id);
   const goTo = (idx: number) => { if (idx >= 0 && idx < allSources.length) handleSelectSource(allSources[idx]); };
 
-  // Read fields from shared service state
-  const fields = getFieldsForSource(selectedSource.id);
-  const stats = getReviewStats(selectedSource.id);
+  // Load fields from API
+  const { data: fields, loading: fieldsLoading, error: fieldsError, reload } = useApi(
+    () => getFieldsForSource(selectedSource.id), [selectedSource.id],
+  );
 
-  const doAccept   = (id: number) => { acceptField(selectedSource.id, id); refresh(); };
-  const doReject   = (id: number) => { rejectField(selectedSource.id, id); refresh(); };
-  const doFlag     = (id: number) => { flagField(selectedSource.id, id); refresh(); };
-  const doReset    = (id: number) => { resetField(selectedSource.id, id); refresh(); };
-  const doAcceptAll = () => { acceptAllFields(selectedSource.id); refresh(); };
+  if (fieldsLoading) return <LoadingState message="Loading fields\u2026" />;
+  if (fieldsError || !fields) return <ErrorState title="Failed to load fields" message={fieldsError ?? undefined} onRetry={reload} />;
+
+  const stats = getReviewStats(fields);
+
+  const doAccept   = async (id: number) => { await acceptField(selectedSource.id, id); reload(); };
+  const doReject   = async (id: number) => { await rejectField(selectedSource.id, id); reload(); };
+  const doFlag     = async (id: number) => { await flagField(selectedSource.id, id); reload(); };
+  const doReset    = async (id: number) => { await resetField(selectedSource.id, id); reload(); };
+  const doAcceptAll = async () => { await acceptAllFields(selectedSource.id); reload(); };
 
   const startEdit = (row: ReviewableField) => { setEditingId(row.id); setEditValue(row.reviewedValue ?? row.extractedValue); };
-  const saveEdit  = (id: number) => { editFieldValue(selectedSource.id, id, editValue); setEditingId(null); refresh(); };
+  const saveEdit  = async (id: number) => { await editFieldValue(selectedSource.id, id, editValue); setEditingId(null); reload(); };
   const startComment = (row: ReviewableField) => { setCommentId(row.id); setCommentText(row.comment ?? ''); };
-  const saveComment = (id: number) => { addFieldComment(selectedSource.id, id, commentText); setCommentId(null); refresh(); };
+  const saveComment = async (id: number) => { await addFieldComment(selectedSource.id, id, commentText); setCommentId(null); reload(); };
 
   const visible = fields.filter(r => {
     const matchCat    = catFilter    === 'All'          || r.category === catFilter;

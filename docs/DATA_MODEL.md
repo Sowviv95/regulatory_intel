@@ -1,23 +1,23 @@
 # Data Model -- Regulatory Intelligence PoC
 
-**Status:** Conceptual draft
-**Date:** 15 July 2026
-**Sprint:** 0
+**Status:** Implemented (Sprint 5)
+**Date:** 16 July 2026
 
 ---
 
-This document defines the initial conceptual entities for the Regulatory Intelligence PoC. No database has been created yet. These entities are derived from the existing UI screens and mock data.
+This document defines the entities for the Regulatory Intelligence PoC. These are implemented as SQLite tables in `backend/database.py`.
 
 ## Entity Relationship Overview
 
 ```
 Source (1) ----< (many) Regulation
 Regulation (1) ----< (many) RegulatoryField
-RegulatoryField (1) ----< (many) Evidence
-RegulatoryField (1) ----< (many) ReviewDecision
-Regulation (1) ----< (many) ReviewComment
-ExportJob (standalone, references filter criteria)
+RegulatoryField (1) ----< (many) Evidence (immutable)
+RegulatoryField (1) ----< (many) ReviewDecision (audit trail)
+ExportJob (standalone, via POST /api/exports)
 ```
+
+**Implemented tables:** `sources`, `regulations`, `regulation_fields`, `evidence`, `review_decisions`
 
 ---
 

@@ -1,22 +1,8 @@
-import type { EvidenceEntry, ReviewSource, ReviewableField, FieldStatus } from '../types';
-import { sourceText, evidenceMap, reviewSources } from '../data/regulations';
+import type { ReviewableField, ReviewSource, EvidenceEntry } from '../types';
+import { get, post } from './api';
+import { reviewSources } from '../data/regulations';
 
-// ---------------------------------------------------------------------------
-// Source text & evidence (immutable)
-// ---------------------------------------------------------------------------
-
-export function getSourceText(_sourceId?: number): string {
-  return sourceText;
-}
-
-export function getEvidenceMap(_sourceId?: number): Record<string, EvidenceEntry> {
-  return evidenceMap;
-}
-
-// ---------------------------------------------------------------------------
-// Review sources (immutable catalogue)
-// ---------------------------------------------------------------------------
-
+// Review sources catalogue (static — used for source selector UI and prev/next)
 export function getReviewSources(): ReviewSource[] {
   return reviewSources;
 }
@@ -26,101 +12,127 @@ export function getReviewSourceById(id: number): ReviewSource | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// Shared mutable review state
-// Keyed by sourceId.  Persists across navigations within a session.
-// Both RegulationReview and RegulationReviewTable read/write this store.
+// Regulation detail from API (includes fields, source text, evidence)
 // ---------------------------------------------------------------------------
 
-const reviewStore: Map<number, ReviewableField[]> = new Map();
-
-function now(): string {
-  const d = new Date();
-  const mon = d.toLocaleString('en-US', { month: 'short' });
-  const day = d.getDate();
-  const h = String(d.getHours()).padStart(2, '0');
-  const m = String(d.getMinutes()).padStart(2, '0');
-  return `${mon} ${day}, 2026 ${h}:${m}`;
+export interface RegulationResponse {
+  id: number;
+  sourceId: number;
+  title: string;
+  regulatoryBody: string;
+  jurisdiction: string;
+  topic: string;
+  summary: string | null;
+  status: string;
+  fields: ReviewableField[];
+  sourceText: string | null;
+  sourceName: string | null;
+  flag: string | null;
+  docType: string | null;
+  country: string | null;
 }
 
-function initFieldsForSource(source: ReviewSource): ReviewableField[] {
-  return source.fields.map(f => ({
-    id: f.id,
-    sourceId: source.id,
-    category: f.category,
-    field: f.field,
-    extractedValue: f.value,
-    reviewedValue: null,
-    evidence: f.evidence,
-    confidence: f.confidence,
-    status: 'Pending' as FieldStatus,
-    comment: null,
-    reviewedAt: null,
-  }));
+export async function getRegulationById(regId: number): Promise<RegulationResponse | null> {
+  try {
+    const res = await get<{ data: RegulationResponse }>(`/api/regulations/${regId}`);
+    return res.data;
+  } catch { return null; }
 }
 
-export function getFieldsForSource(sourceId: number): ReviewableField[] {
-  if (!reviewStore.has(sourceId)) {
-    const source = getReviewSourceById(sourceId);
-    if (!source) return [];
-    reviewStore.set(sourceId, initFieldsForSource(source));
-  }
-  return reviewStore.get(sourceId)!;
+// Compatibility: get fields for a source (finds regulation by source_id)
+export async function getFieldsForSource(sourceId: number): Promise<ReviewableField[]> {
+  // First get the regulation(s) for this source
+  const regsRes = await get<{ data: { id: number }[] }>(`/api/sources/${sourceId}/regulations`);
+  if (!regsRes.data.length) return [];
+  // Get fields from the first regulation
+  const regId = regsRes.data[0].id;
+  const regRes = await get<{ data: { fields: ReviewableField[] } }>(`/api/regulations/${regId}`);
+  return regRes.data.fields;
 }
 
-function updateField(sourceId: number, fieldId: number, updater: (f: ReviewableField) => ReviewableField): void {
-  const fields = getFieldsForSource(sourceId);
-  reviewStore.set(sourceId, fields.map(f => f.id === fieldId ? updater(f) : f));
+// Evidence from API
+export async function getEvidenceForField(fieldId: number): Promise<{
+  excerpt: string; section: string | null; sourceReference: string | null; immutable: boolean;
+} | null> {
+  try {
+    const res = await get<{ data: { excerpt: string; section: string | null; sourceReference: string | null; immutable: boolean } }>(`/api/evidence/${fieldId}`);
+    return res.data;
+  } catch { return null; }
 }
 
-export function acceptField(sourceId: number, fieldId: number): void {
-  updateField(sourceId, fieldId, f => ({ ...f, status: 'Accepted', reviewedAt: now() }));
+// Source text from API
+export async function getSourceTextForSource(sourceId: number): Promise<string | null> {
+  try {
+    const res = await get<{ data: { sourceText: string | null } }>(`/api/sources/${sourceId}`);
+    return res.data.sourceText;
+  } catch { return null; }
 }
 
-export function rejectField(sourceId: number, fieldId: number): void {
-  updateField(sourceId, fieldId, f => ({ ...f, status: 'Rejected', reviewedAt: now() }));
-}
-
-export function flagField(sourceId: number, fieldId: number): void {
-  updateField(sourceId, fieldId, f => ({ ...f, status: 'Flagged', reviewedAt: now() }));
-}
-
-export function resetField(sourceId: number, fieldId: number): void {
-  updateField(sourceId, fieldId, f => ({
-    ...f,
-    status: 'Pending',
-    reviewedValue: null,
-    comment: null,
-    reviewedAt: null,
-  }));
-}
-
-export function editFieldValue(sourceId: number, fieldId: number, newValue: string): void {
-  updateField(sourceId, fieldId, f => ({
-    ...f,
-    reviewedValue: newValue,
-    status: 'Accepted',
-    reviewedAt: now(),
-  }));
-}
-
-export function addFieldComment(sourceId: number, fieldId: number, comment: string): void {
-  updateField(sourceId, fieldId, f => ({ ...f, comment, reviewedAt: now() }));
-}
-
-export function acceptAllFields(sourceId: number): void {
-  const fields = getFieldsForSource(sourceId);
-  const ts = now();
-  reviewStore.set(sourceId, fields.map(f =>
-    f.status === 'Pending' ? { ...f, status: 'Accepted' as FieldStatus, reviewedAt: ts } : f,
-  ));
+// Keep static evidence map for highlight ranges (source-text specific, not from DB)
+export function getHighlightRanges(): Record<string, [number, number]> {
+  return {
+    Title: [2, 4], Summary: [11, 15], 'Products Impacted': [18, 20],
+    'Sector Impact': [41, 42], Likelihood: [45, 46], 'Comment Deadline': [49, 50],
+    'Effective Date': [45, 46],
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Aggregate queries (for cross-screen consistency)
+// Field-level review actions (now via /api/fields endpoints)
 // ---------------------------------------------------------------------------
 
-export function getReviewStats(sourceId: number): { total: number; accepted: number; rejected: number; flagged: number; pending: number } {
-  const fields = getFieldsForSource(sourceId);
+export async function acceptField(_sourceId: number, fieldId: number): Promise<ReviewableField> {
+  const res = await post<{ data: ReviewableField }>(`/api/fields/${fieldId}/review`, {
+    fieldId, decision: 'Accepted',
+  });
+  return res.data;
+}
+
+export async function rejectField(_sourceId: number, fieldId: number): Promise<ReviewableField> {
+  const res = await post<{ data: ReviewableField }>(`/api/fields/${fieldId}/review`, {
+    fieldId, decision: 'Rejected',
+  });
+  return res.data;
+}
+
+export async function flagField(_sourceId: number, fieldId: number): Promise<ReviewableField> {
+  const res = await post<{ data: ReviewableField }>(`/api/fields/${fieldId}/review`, {
+    fieldId, decision: 'Flagged',
+  });
+  return res.data;
+}
+
+export async function resetField(_sourceId: number, fieldId: number): Promise<ReviewableField> {
+  const res = await post<{ data: ReviewableField }>(`/api/fields/${fieldId}/review`, {
+    fieldId, decision: 'Reset',
+  });
+  return res.data;
+}
+
+export async function editFieldValue(_sourceId: number, fieldId: number, newValue: string): Promise<ReviewableField> {
+  const res = await post<{ data: ReviewableField }>(`/api/fields/${fieldId}/review`, {
+    fieldId, decision: 'Edited', newValue,
+  });
+  return res.data;
+}
+
+export async function addFieldComment(_sourceId: number, fieldId: number, comment: string): Promise<ReviewableField> {
+  const res = await post<{ data: ReviewableField }>(`/api/fields/${fieldId}/review`, {
+    fieldId, decision: 'Comment', comment,
+  });
+  return res.data;
+}
+
+export async function acceptAllFields(sourceId: number): Promise<ReviewableField[]> {
+  // Find the regulation for this source, then accept all
+  const regsRes = await get<{ data: { id: number }[] }>(`/api/sources/${sourceId}/regulations`);
+  if (!regsRes.data.length) return [];
+  const regId = regsRes.data[0].id;
+  const res = await post<{ data: ReviewableField[] }>(`/api/regulations/${regId}/review/accept-all`, {});
+  return res.data;
+}
+
+export function getReviewStats(fields: ReviewableField[]) {
   return {
     total: fields.length,
     accepted: fields.filter(f => f.status === 'Accepted').length,
@@ -128,9 +140,4 @@ export function getReviewStats(sourceId: number): { total: number; accepted: num
     flagged: fields.filter(f => f.status === 'Flagged').length,
     pending: fields.filter(f => f.status === 'Pending').length,
   };
-}
-
-export function isSourceFullyReviewed(sourceId: number): boolean {
-  const fields = getFieldsForSource(sourceId);
-  return fields.length > 0 && fields.every(f => f.status !== 'Pending');
 }

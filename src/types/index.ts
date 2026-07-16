@@ -142,12 +142,15 @@ export interface ReviewSource {
 
 export interface ReviewableField {
   id: number;
+  regulationId?: number;
   sourceId: number;
   category: string;
   field: string;
   extractedValue: string;
   reviewedValue: string | null;
   evidence: string;
+  evidenceSection?: string | null;
+  evidenceReference?: string | null;
   confidence: number;
   status: FieldStatus;
   comment: string | null;
