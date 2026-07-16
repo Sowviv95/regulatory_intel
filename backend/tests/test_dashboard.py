@@ -64,6 +64,30 @@ def test_jurisdictions_from_data():
     assert len(countries) >= 5  # 6 unique countries in seed
 
 
+def test_jurisdiction_fields_present():
+    """Each jurisdiction has all required fields including new ones."""
+    d = client.get("/api/dashboard").json()["data"]
+    for j in d["jurisdictions"]:
+        assert "country" in j
+        assert "flag" in j
+        assert "total" in j
+        assert "covered" in j
+        assert "pending" in j
+        assert "irrelevant" in j
+        assert "highImpact" in j
+
+
+def test_jurisdiction_reconciliation():
+    """covered + pending + irrelevant = total for every jurisdiction."""
+    d = client.get("/api/dashboard").json()["data"]
+    for j in d["jurisdictions"]:
+        accounted = j["covered"] + j["pending"] + j["irrelevant"]
+        assert accounted == j["total"], (
+            f'{j["country"]}: covered({j["covered"]}) + pending({j["pending"]}) + '
+            f'irrelevant({j["irrelevant"]}) = {accounted} != total({j["total"]})'
+        )
+
+
 def test_alerts_are_recent_sources():
     """Alerts are actual source records, not static."""
     d = client.get("/api/dashboard").json()["data"]
@@ -124,10 +148,10 @@ def test_review_rate_updates():
 def test_source_status_change_updates_kpis():
     """Changing a source status updates the dashboard counts."""
     d1 = client.get("/api/dashboard").json()["data"]["stats"]
-    # Change source 3 (New) to Processing
-    client.patch("/api/sources/3", json={"status": "Processing", "stage": "Translating"})
+    # Change source 3 (New) to Ready for Review
+    client.patch("/api/sources/3", json={"status": "Ready for Review", "stage": "Analyst Review"})
     d2 = client.get("/api/dashboard").json()["data"]["stats"]
-    assert d2["processingSources"] >= d1["processingSources"]
+    assert d2["reviewSources"] >= d1["reviewSources"]
 
 
 # -- Imported Tamarind data ---------------------------------------------------

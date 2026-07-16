@@ -2,16 +2,16 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
   Play, RotateCcw, EyeOff, ArrowRight, RefreshCw, Loader, CheckCircle, AlertCircle,
-  Search, X, ChevronDown, ChevronUp, Eye, FileText, Clock, Hash,
+  Search, X, ChevronDown, ChevronUp, Clock, Hash,
 } from 'lucide-react';
-import { K, statusStyle } from './kiaa-tokens';
+import { K, statusStyle, statusDisplayLabel } from './kiaa-tokens';
 import { Badge } from './KBadge';
 import { LoadingState, ErrorState } from './StateViews';
 import { getSources, updateSourceStatus, bulkUpdateStatus } from '../../services/sources';
 import { useApi } from '../../services/useApi';
 import type { Source, SourceStatus, ProcessingStage } from '../../types';
 
-const ALL_TABS: SourceStatus[] = ['New', 'Processing', 'Ready for Review', 'Irrelevant'];
+const ALL_TABS: SourceStatus[] = ['New', 'Ready for Review', 'Irrelevant'];
 
 // ---------------------------------------------------------------------------
 // Small sub-components
@@ -34,15 +34,16 @@ function StageChip({ stage }: { stage: ProcessingStage }) {
   );
 }
 
-function ActionBtn({ icon, label, accent, onClick }: { icon: React.ReactNode; label: string; accent?: boolean; onClick: () => void }) {
+function ActionBtn({ icon, label, accent, onClick, disabled }: { icon: React.ReactNode; label: string; accent?: boolean; onClick: () => void; disabled?: boolean }) {
   return (
-    <button onClick={e => { e.stopPropagation(); onClick(); }} style={{
+    <button onClick={e => { e.stopPropagation(); if (!disabled) onClick(); }} disabled={disabled} style={{
       display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px',
-      background: accent ? K.accentSubtle : '#f8fafc',
-      border: `1px solid ${accent ? K.accentBorder : K.border}`,
+      background: disabled ? '#f1f5f9' : accent ? K.accentSubtle : '#f8fafc',
+      border: `1px solid ${disabled ? K.borderSubtle : accent ? K.accentBorder : K.border}`,
       borderRadius: '5px', fontSize: '11px', fontWeight: 600,
-      color: accent ? K.accentText : K.textSecondary,
-      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+      color: disabled ? K.textFaint : accent ? K.accentText : K.textSecondary,
+      cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+      opacity: disabled ? 0.6 : 1,
     }}>
       {icon} {label}
     </button>
@@ -94,62 +95,6 @@ function FilterDropdown({ label, value, options, onChange }: {
 }
 
 // ---------------------------------------------------------------------------
-// Detail panel
-// ---------------------------------------------------------------------------
-
-function DetailPanel({ source, onClose }: { source: Source; onClose: () => void }) {
-  const ss = statusStyle(source.status);
-  return (
-    <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '380px', background: '#fff', borderLeft: `1px solid ${K.border}`, boxShadow: '-8px 0 32px rgba(0,0,0,0.08)', zIndex: 300, display: 'flex', flexDirection: 'column', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${K.border}`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <FileText size={14} style={{ color: K.textMuted }} />
-          <span style={{ fontSize: '13px', fontWeight: 700, color: K.textPrimary }}>Source Details</span>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: K.textFaint, padding: '4px', display: 'flex' }}><X size={16} /></button>
-      </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-          <span style={{ fontSize: '22px' }}>{source.flag}</span>
-          <div>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: K.textPrimary, lineHeight: 1.3 }}>{source.title}</div>
-            <div style={{ fontSize: '11px', color: K.textMuted, marginTop: '2px' }}>{source.source}</div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>
-          <Badge label={source.status} style={ss} />
-          <StageChip stage={source.stage} />
-        </div>
-
-        {source.failureMessage && (
-          <div style={{ padding: '10px 12px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: '7px', marginBottom: '16px' }}>
-            <div style={{ fontSize: '10px', fontWeight: 600, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Failure</div>
-            <div style={{ fontSize: '12px', color: '#b91c1c', lineHeight: 1.5 }}>{source.failureMessage}</div>
-          </div>
-        )}
-
-        {[
-          { label: 'Country', value: `${source.flag} ${source.country}` },
-          { label: 'Language', value: source.language },
-          { label: 'Document Type', value: source.docType },
-          { label: 'Discovered', value: source.discovered },
-          { label: 'Regulations Extracted', value: String(source.regulationCount) },
-          { label: 'Review Required', value: String(source.reviewRequiredCount) },
-          { label: 'Processing Started', value: source.startedAt ?? '\u2014' },
-          { label: 'Processing Completed', value: source.completedAt ?? '\u2014' },
-        ].map(item => (
-          <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${K.borderSubtle}` }}>
-            <span style={{ fontSize: '12px', color: K.textMuted }}>{item.label}</span>
-            <span style={{ fontSize: '12px', fontWeight: 500, color: K.textPrimary, textAlign: 'right', maxWidth: '200px' }}>{item.value}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -160,7 +105,6 @@ export function SourceQueue() {
   // Initialize filters from URL params (for dashboard navigation)
   const initialStatus = (searchParams.get('status') as SourceStatus | null) ?? undefined;
   const initialCountry = searchParams.get('country') ?? undefined;
-
   // Filters
   const [activeTab, setActiveTab] = useState<SourceStatus | 'All'>(initialStatus ?? 'All');
   const [query, setQuery] = useState('');
@@ -171,7 +115,11 @@ export function SourceQueue() {
 
   // Selection
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [detailSource, setDetailSource] = useState<Source | null>(null);
+
+  // Processing transition state
+  const PROCESSING_DELAY = 2500; // ms
+  const [processingIds, setProcessingIds] = useState<Set<number>>(new Set());
+  const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
 
   // Load all sources from API, filter client-side for tabs/search
   const { data: allRows, loading, error, reload } = useApi(
@@ -182,8 +130,8 @@ export function SourceQueue() {
   if (loading) return <LoadingState message="Loading sources\u2026" />;
   if (error || !allRows) return <ErrorState title="Failed to load sources" message={error ?? undefined} onRetry={reload} />;
 
-  // Tab counts from full dataset
-  const counts: Record<string, number> = { New: 0, Processing: 0, 'Ready for Review': 0, Irrelevant: 0 };
+  // Tab counts from full dataset (keyed by backend status value)
+  const counts: Record<string, number> = { New: 0, 'Ready for Review': 0, Irrelevant: 0 };
   for (const r of allRows) if (r.status in counts) counts[r.status]++;
 
   // Tab filter
@@ -198,25 +146,49 @@ export function SourceQueue() {
     });
   }
 
-  const activeJobs = counts['Processing'];
+  const toProcess = counts['New'];
   const readyForReview = counts['Ready for Review'];
   const failures = allRows.filter(r => r.failureMessage).length;
 
-  // Async actions
+  // Async actions (non-processing)
   const act = async (fn: () => Promise<unknown>) => {
     await fn();
     setSelected(new Set());
     reload();
   };
-  const startProcessing = (id: number) => act(() => updateSourceStatus(id, 'Processing', 'Translating'));
+
+  // Processing transition: frontend-only indicator for ~2.5s, then persist directly as Ready for Review
+  const runProcessingTransition = async (id: number) => {
+    if (processingIds.has(id)) return; // prevent duplicate clicks
+    setFailedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+    setProcessingIds(prev => new Set(prev).add(id));
+    // Show spinner for demo delay (source stays as New in backend)
+    await new Promise(r => setTimeout(r, PROCESSING_DELAY));
+    // Persist directly to Ready for Review
+    try {
+      await updateSourceStatus(id, 'Ready for Review', 'Analyst Review');
+      setProcessingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+      reload();
+    } catch {
+      // Failed — source stays in To Process, show retry
+      setProcessingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+      setFailedIds(prev => new Set(prev).add(id));
+      reload();
+    }
+  };
+
+  const startProcessing = (id: number) => { runProcessingTransition(id); };
   const markIrrelevant = (id: number) => act(() => updateSourceStatus(id, 'Irrelevant', 'Discarded'));
-  const retry = (id: number) => act(() => updateSourceStatus(id, 'Processing', 'AI Extraction'));
   const restore = (id: number) => act(() => updateSourceStatus(id, 'New', 'Awaiting Extraction'));
-  const processAll = () => act(async () => {
-    const newSources = filtered.filter(s => s.status === 'New');
-    await Promise.all(newSources.map(s => updateSourceStatus(s.id, 'Processing', 'Translating')));
-  });
-  const bulkProcess = () => act(() => bulkUpdateStatus([...selected], 'Processing', 'Translating'));
+  const processAll = () => {
+    const newSources = filtered.filter(s => s.status === 'New' && !processingIds.has(s.id));
+    newSources.forEach(s => runProcessingTransition(s.id));
+  };
+  const bulkProcess = () => {
+    const ids = [...selected].filter(id => !processingIds.has(id));
+    ids.forEach(id => runProcessingTransition(id));
+    setSelected(new Set());
+  };
   const bulkIrrelevant = () => act(() => bulkUpdateStatus([...selected], 'Irrelevant', 'Discarded'));
 
   // Selection helpers
@@ -240,6 +212,10 @@ export function SourceQueue() {
     if (sortBy !== col) return null;
     return sortDir === 'asc' ? <ChevronUp size={10} /> : <ChevronDown size={10} />;
   };
+
+  // Derive unique filter options from loaded data
+  const countries = [...new Set(allRows.map(r => r.country))].sort();
+  const docTypes = [...new Set(allRows.map(r => r.docType))].sort();
 
   const totalCount = Object.values(counts).reduce((a, b) => a + b, 0);
   const hasFilters = query || countryFilter !== 'All' || docTypeFilter !== 'All';
@@ -273,18 +249,18 @@ export function SourceQueue() {
             </>
           )}
           <button onClick={processAll} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 14px', background: K.accent, border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
-            <Play size={12} /> Process All New
+            <Play size={12} /> Process All
           </button>
-          <button onClick={refresh} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 13px', background: '#fff', border: `1px solid ${K.border}`, borderRadius: '6px', fontSize: '12px', fontWeight: 500, color: K.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
+          <button onClick={reload} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 13px', background: '#fff', border: `1px solid ${K.border}`, borderRadius: '6px', fontSize: '12px', fontWeight: 500, color: K.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
             <RefreshCw size={13} /> Refresh
           </button>
         </div>
       </div>
 
-      {/* Processing summary */}
+      {/* Queue summary */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
         {[
-          { label: 'Active Jobs',      value: activeJobs,    icon: <Loader size={14} color="#7c3aed" />,      accent: '#7c3aed', bg: 'rgba(124,58,237,0.07)' },
+          { label: 'To Process',        value: toProcess,     icon: <Clock size={14} color="#2563eb" />,         accent: '#2563eb', bg: 'rgba(59,130,246,0.07)' },
           { label: 'Ready for Review',  value: readyForReview, icon: <CheckCircle size={14} color={K.accent} />, accent: K.accent,  bg: K.accentSubtle },
           { label: 'Failures',          value: failures,      icon: <AlertCircle size={14} color="#dc2626" />,   accent: '#dc2626', bg: 'rgba(239,68,68,0.07)' },
         ].map(card => (
@@ -330,10 +306,11 @@ export function SourceQueue() {
         {ALL_TABS.map(tab => {
           const active = activeTab === tab;
           const ss = statusStyle(tab);
+          const displayLabel = statusDisplayLabel(tab);
           return (
             <button key={tab} onClick={() => setActiveTab(tab)}
               style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '7px', border: `1px solid ${active ? ss.border : K.border}`, background: active ? ss.bg : '#fff', color: active ? ss.text : K.textMuted, fontSize: '12px', fontWeight: active ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s' }}>
-              {tab}
+              {displayLabel}
               <span style={{ fontSize: '11px', fontWeight: 600, padding: '0 5px', borderRadius: '9px', background: active ? 'rgba(0,0,0,0.08)' : K.progressBg, color: active ? ss.text : K.textFaint }}>
                 {counts[tab]}
               </span>
@@ -388,10 +365,10 @@ export function SourceQueue() {
               const ss = statusStyle(row.status);
               return (
                 <tr key={row.id}
-                  style={{ background: baseBg, transition: 'background 0.1s', cursor: 'pointer' }}
+                  style={{ background: baseBg, transition: 'background 0.1s', cursor: row.status === 'Ready for Review' ? 'pointer' : 'default' }}
                   onMouseEnter={e => { if (!isSel) (e.currentTarget as HTMLElement).style.background = K.cardBgHover; }}
                   onMouseLeave={e => { if (!isSel) (e.currentTarget as HTMLElement).style.background = baseBg; }}
-                  onClick={() => setDetailSource(row)}
+                  onClick={() => { if (row.status === 'Ready for Review') navigate(`/regulations?source=${row.id}`); }}
                 >
                   <td style={tdStyle} onClick={e => { e.stopPropagation(); toggleRow(row.id); }}>
                     <input type="checkbox" checked={isSel} onChange={() => toggleRow(row.id)} style={{ cursor: 'pointer' }} />
@@ -412,26 +389,30 @@ export function SourceQueue() {
                   <td style={{ ...tdStyle, fontSize: '11px' }}>{row.docType}</td>
                   <td style={{ ...tdStyle, color: K.textMuted, whiteSpace: 'nowrap', fontSize: '11px' }}>{row.discovered}</td>
                   <td style={tdStyle}><StageChip stage={row.stage} /></td>
-                  <td style={tdStyle}><Badge label={row.status} style={ss} /></td>
+                  <td style={tdStyle}><Badge label={statusDisplayLabel(row.status)} style={ss} /></td>
                   <td style={{ ...tdStyle, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                    <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
-                      {row.status === 'New' && (
+                    <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', flexWrap: 'nowrap', alignItems: 'center' }}>
+                      {row.status === 'New' && !processingIds.has(row.id) && !failedIds.has(row.id) && (
                         <>
                           <ActionBtn icon={<Play size={11} />} label="Process" accent onClick={() => startProcessing(row.id)} />
                           <ActionBtn icon={<EyeOff size={11} />} label="Irrelevant" onClick={() => markIrrelevant(row.id)} />
                         </>
                       )}
-                      {row.status === 'Processing' && (
-                        <>
-                          <ActionBtn icon={<RotateCcw size={11} />} label="Retry" onClick={() => retry(row.id)} />
+                      {row.status === 'New' && processingIds.has(row.id) && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px' }}>
+                          <Loader size={12} style={{ animation: 'spin 1s linear infinite', color: '#7c3aed' }} />
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: '#7c3aed' }}>Processing\u2026</span>
+                        </div>
+                      )}
+                      {row.status === 'New' && !processingIds.has(row.id) && failedIds.has(row.id) && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span style={{ fontSize: '10px', color: '#dc2626', fontWeight: 500 }}>Failed</span>
+                          <ActionBtn icon={<RotateCcw size={11} />} label="Retry" accent onClick={() => startProcessing(row.id)} />
                           <ActionBtn icon={<EyeOff size={11} />} label="Irrelevant" onClick={() => markIrrelevant(row.id)} />
-                        </>
+                        </div>
                       )}
                       {row.status === 'Ready for Review' && (
-                        <>
-                          <ActionBtn icon={<ArrowRight size={11} />} label="Review" accent onClick={() => navigate(`/sources/${row.sourceId}`)} />
-                          <ActionBtn icon={<Eye size={11} />} label="Details" onClick={() => setDetailSource(row)} />
-                        </>
+                        <ActionBtn icon={<ArrowRight size={11} />} label="Review" accent onClick={() => navigate(`/regulations?source=${row.id}`)} />
                       )}
                       {row.status === 'Irrelevant' && (
                         <ActionBtn icon={<RotateCcw size={11} />} label="Restore" onClick={() => restore(row.id)} />
@@ -445,8 +426,6 @@ export function SourceQueue() {
         </table>
       </div>
 
-      {/* Detail panel */}
-      {detailSource && <DetailPanel source={detailSource} onClose={() => setDetailSource(null)} />}
     </div>
   );
 }

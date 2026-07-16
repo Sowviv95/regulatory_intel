@@ -9,11 +9,38 @@ import { K } from './kiaa-tokens';
 import { Badge } from './KBadge';
 import { LoadingState, ErrorState } from './StateViews';
 import {
-  searchRecords, getSavedViews, getUniqueJurisdictions, getUniqueSourceTitles,
+  searchRecords, getUniqueJurisdictions, getUniqueSourceTitles,
   generateCsv, downloadCsv, getExportSummary,
 } from '../../services/search';
 import { useApi } from '../../services/useApi';
 import type { SearchableRecord, FieldStatus } from '../../types';
+
+// ---------------------------------------------------------------------------
+// Saved view definitions — each maps to a set of client-side filter criteria.
+// Counts are computed dynamically from live data.
+// ---------------------------------------------------------------------------
+
+interface ViewFilter {
+  id: number;
+  name: string;
+  starred: boolean;
+  match: (r: SearchableRecord) => boolean;
+}
+
+const VIEW_DEFINITIONS: ViewFilter[] = [
+  { id: 0, name: 'All Regulations', starred: false,
+    match: () => true },
+  { id: 1, name: 'APAC Region', starred: true,
+    match: r => ['Taiwan', 'South Korea', 'Vietnam'].includes(r.jurisdiction) },
+  { id: 2, name: 'EU / EEA', starred: true,
+    match: r => ['Denmark', 'Poland', 'Finland'].includes(r.jurisdiction) },
+  { id: 3, name: 'Middle East', starred: false,
+    match: r => r.jurisdiction === 'United Arab Emirates' },
+  { id: 4, name: 'Assessment Fields', starred: false,
+    match: r => r.category === 'Assessment' },
+  { id: 5, name: 'Low Confidence', starred: false,
+    match: r => r.confidence < 75 },
+];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -215,25 +242,58 @@ export function SearchExport() {
 
   // UI state
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [activeView, setActiveView] = useState<number | null>(1);
+  const [activeView, setActiveView] = useState<number>(0);
   const [evidenceRecord, setEvidenceRecord] = useState<SearchableRecord | null>(null);
   const [showExportSummary, setShowExportSummary] = useState(false);
   const [exported, setExported] = useState(false);
 
-  const savedViews = getSavedViews();
-
-  // Load all records initially for filter dropdown population
-  const { data: allRecords } = useApi(() => searchRecords({}), []);
-  const jurisdictions = allRecords ? getUniqueJurisdictions(allRecords) : [];
-  const sourceTitles = allRecords ? getUniqueSourceTitles(allRecords) : [];
-
-  const { data: filtered, loading, error, reload } = useApi(
-    () => searchRecords({ q: query, jurisdiction, category, status, confidence, source }),
-    [query, jurisdiction, category, status, confidence, source],
-  );
+  // Load all records from API — filters and saved views are applied client-side
+  const { data: allRecords, loading, error, reload } = useApi(() => searchRecords({}), []);
 
   if (loading) return <LoadingState message="Searching records\u2026" />;
-  if (error || !filtered) return <ErrorState title="Search failed" message={error ?? undefined} onRetry={reload} />;
+  if (error || !allRecords) return <ErrorState title="Search failed" message={error ?? undefined} onRetry={reload} />;
+
+  // Derive filter dropdown options from the full dataset
+  const jurisdictions = getUniqueJurisdictions(allRecords);
+  const sourceTitles = getUniqueSourceTitles(allRecords);
+
+  // Compute saved-view counts from live data
+  const viewCounts = VIEW_DEFINITIONS.map(v => ({
+    ...v,
+    count: allRecords.filter(v.match).length,
+  }));
+
+  // Apply saved-view filter first, then apply filter-chip filters on top
+  const activeViewDef = VIEW_DEFINITIONS.find(v => v.id === activeView);
+  let filtered = activeViewDef ? allRecords.filter(activeViewDef.match) : allRecords;
+
+  // Apply filter chips (AND logic between filters)
+  if (jurisdiction !== 'All') filtered = filtered.filter(r => r.jurisdiction === jurisdiction);
+  if (category !== 'All') filtered = filtered.filter(r => r.category === category);
+  if (status !== 'All') filtered = filtered.filter(r => r.status === status);
+  if (confidence !== 'All') {
+    if (confidence === 'High') filtered = filtered.filter(r => r.confidence >= 90);
+    else if (confidence === 'Medium') filtered = filtered.filter(r => r.confidence >= 75 && r.confidence < 90);
+    else if (confidence === 'Low') filtered = filtered.filter(r => r.confidence < 75);
+  }
+  if (source !== 'All') filtered = filtered.filter(r => r.sourceTitle === source);
+
+  // Apply text search (match against multiple fields)
+  if (query) {
+    const q = query.toLowerCase();
+    filtered = filtered.filter(r =>
+      r.sourceTitle.toLowerCase().includes(q) ||
+      r.sourceName.toLowerCase().includes(q) ||
+      r.jurisdiction.toLowerCase().includes(q) ||
+      r.fieldName.toLowerCase().includes(q) ||
+      r.extractedValue.toLowerCase().includes(q) ||
+      (r.reviewedValue && r.reviewedValue.toLowerCase().includes(q)) ||
+      r.evidence.toLowerCase().includes(q) ||
+      (r.comment && r.comment.toLowerCase().includes(q)) ||
+      r.category.toLowerCase().includes(q) ||
+      r.docType.toLowerCase().includes(q)
+    );
+  }
 
   // Client-side sort
   let sorted = filtered;
@@ -266,16 +326,29 @@ export function SearchExport() {
   };
 
   const hasFilters = [jurisdiction, category, status, confidence, source].some(v => v !== 'All');
-  const clearFilters = () => { setJurisdiction('All'); setCategory('All'); setStatus('All'); setConfidence('All'); setSource('All'); };
+  const clearFilters = () => { setJurisdiction('All'); setCategory('All'); setStatus('All'); setConfidence('All'); setSource('All'); setSelected(new Set()); };
 
+  // Saved view click handler — clear chip filters and selection when switching views
+  const selectView = (id: number) => {
+    setActiveView(id);
+    setJurisdiction('All');
+    setCategory('All');
+    setStatus('All');
+    setConfidence('All');
+    setSource('All');
+    setQuery('');
+    setSelected(new Set());
+  };
+
+  type SortCol = 'jurisdiction' | 'fieldName' | 'confidence' | 'status' | 'date';
   // Sort toggle
-  const toggleSort = (col: NonNullable<SearchFilters['sortBy']>) => {
+  const toggleSort = (col: SortCol) => {
     if (sortBy === col) {
       if (sortDir === 'desc') setSortDir('asc');
       else { setSortBy(undefined); setSortDir('desc'); }
     } else { setSortBy(col); setSortDir('desc'); }
   };
-  const SortIcon = ({ col }: { col: NonNullable<SearchFilters['sortBy']> }) => {
+  const SortIcon = ({ col }: { col: SortCol }) => {
     if (sortBy !== col) return null;
     return sortDir === 'asc' ? <ChevronUp size={9} /> : <ChevronDown size={9} />;
   };
@@ -310,8 +383,8 @@ export function SearchExport() {
           </button>
         </div>
         <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
-          {savedViews.map(view => (
-            <button key={view.id} onClick={() => setActiveView(view.id)}
+          {viewCounts.map(view => (
+            <button key={view.id} onClick={() => selectView(view.id)}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '8px 10px', marginBottom: '2px', borderRadius: '6px', border: `1px solid ${activeView === view.id ? K.accentBorder : 'transparent'}`, background: activeView === view.id ? K.accentSubtle : 'transparent', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s' }}
               onMouseEnter={e => { if (activeView !== view.id) (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.03)'; }}
               onMouseLeave={e => { if (activeView !== view.id) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
@@ -452,7 +525,7 @@ export function SearchExport() {
                         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                           <button onClick={() => setEvidenceRecord(row)} title="View evidence" style={{ width: '26px', height: '26px', borderRadius: '5px', border: `1px solid ${K.accentBorder}`, background: K.accentSubtle, color: K.accentText, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Eye size={12} /></button>
                           <button onClick={() => navigate(`/regulations/${row.sourceId}`)} title="Open detail view" style={{ width: '26px', height: '26px', borderRadius: '5px', border: `1px solid ${K.border}`, background: '#f8fafc', color: K.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={12} /></button>
-                          <button onClick={() => navigate(`/sources/${row.sourceId}`)} title="Open table view" style={{ width: '26px', height: '26px', borderRadius: '5px', border: `1px solid ${K.border}`, background: '#f8fafc', color: K.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileSpreadsheet size={12} /></button>
+                          <button onClick={() => navigate(`/regulations?source=${row.sourceId}`)} title="Open table view" style={{ width: '26px', height: '26px', borderRadius: '5px', border: `1px solid ${K.border}`, background: '#f8fafc', color: K.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileSpreadsheet size={12} /></button>
                         </div>
                       </td>
                     </tr>

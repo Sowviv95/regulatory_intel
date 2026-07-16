@@ -66,8 +66,9 @@ def get_dashboard():
                COUNT(DISTINCT s.id) as total,
                COUNT(DISTINCT CASE WHEN s.status IN ('Ready for Review','Processing') THEN s.id END) as covered,
                COUNT(DISTINCT CASE WHEN s.status = 'New' THEN s.id END) as pending,
+               COUNT(DISTINCT CASE WHEN s.status = 'Irrelevant' THEN s.id END) as irrelevant,
                COUNT(DISTINCT CASE WHEN rf.field_name = 'Sector Impact'
-                                     AND rf.extracted_value = 'High' THEN s.id END) as high
+                                     AND rf.extracted_value = 'High' THEN s.id END) as high_impact
         FROM sources s
         LEFT JOIN regulation_fields rf ON rf.source_id = s.id
         GROUP BY s.country, s.flag
@@ -75,7 +76,9 @@ def get_dashboard():
     """).fetchall()
     jurisdictions = [
         {"country": r["country"], "flag": r["flag"], "total": r["total"],
-         "covered": r["covered"], "pending": r["pending"], "high": r["high"]}
+         "covered": r["covered"], "pending": r["pending"],
+         "irrelevant": r["irrelevant"],
+         "highImpact": r["high_impact"]}
         for r in jur_rows
     ]
 
@@ -135,7 +138,7 @@ def get_dashboard():
          "sub": f"Across {n_jur} jurisdictions",
          "nav": "/sources"},
         {"label": "Ready for Review", "value": str(review_sources),
-         "delta": f"{new_sources} new", "up": new_sources > 0,
+         "delta": f"{new_sources} to process", "up": new_sources > 0,
          "sub": "In analyst queue",
          "nav": "/sources?status=Ready for Review"},
         {"label": "High Impact", "value": str(high_impact),

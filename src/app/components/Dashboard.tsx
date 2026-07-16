@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   TrendingUp, TrendingDown, Bell, Globe, Activity, Clock, CheckCircle2,
-  XCircle, Flag, AlertTriangle, RefreshCw, FileText, ShieldCheck, Loader2,
+  XCircle, Flag, AlertTriangle, RefreshCw, FileText, Loader2,
 } from 'lucide-react';
-import { K, impactStyle, statusStyle } from './kiaa-tokens';
+import { K, impactStyle, statusStyle, statusDisplayLabel } from './kiaa-tokens';
 import { Badge } from './KBadge';
 import { LoadingState, ErrorState } from './StateViews';
 import { getDashboardData } from '../../services/dashboard';
@@ -25,7 +25,7 @@ export function Dashboard() {
   if (loading) return <LoadingState message="Loading dashboard\u2026" />;
   if (error || !data) return <ErrorState title="Failed to load dashboard" message={error ?? undefined} onRetry={reload} />;
 
-  const { kpis, stats, jurisdictions, alerts, recentActivity, oldestPending } = data;
+  const { kpis, jurisdictions, alerts, recentActivity, oldestPending } = data;
 
   const decisionIcon = (d: string) => {
     if (d === 'Accepted') return <CheckCircle2 size={11} color={K.accent} />;
@@ -82,32 +82,6 @@ export function Dashboard() {
         ))}
       </div>
 
-      {/* Stats bar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '10px', marginBottom: '20px' }}>
-        {[
-          { label: 'Regulations', value: stats.totalRegulations, icon: <FileText size={13} color={K.textMuted} />, nav: '/search' },
-          { label: 'Accepted', value: stats.acceptedFields, icon: <CheckCircle2 size={13} color={K.accent} />, nav: '/search?status=Accepted' },
-          { label: 'Rejected', value: stats.rejectedFields, icon: <XCircle size={13} color="#dc2626" />, nav: '/search?status=Rejected' },
-          { label: 'Flagged', value: stats.flaggedFields, icon: <Flag size={13} color="#d97706" />, nav: '/search?status=Flagged' },
-          { label: 'Low Confidence', value: stats.lowConfidenceFields, icon: <AlertTriangle size={13} color="#dc2626" />, nav: '/search?confidence=Low' },
-          { label: 'Evidence', value: `${stats.evidenceCoverage}%`, icon: <ShieldCheck size={13} color={K.accent} />, nav: '/search' },
-        ].map(s => (
-          <div
-            key={s.label}
-            onClick={() => navigate(s.nav)}
-            style={{ background: '#fff', border: `1px solid ${K.border}`, borderRadius: '8px', padding: '12px 14px', cursor: 'pointer', transition: 'border-color 0.12s' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = K.accentBorder; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = K.border; }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '6px' }}>
-              {s.icon}
-              <span style={{ fontSize: '10px', fontWeight: 600, color: K.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</span>
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: K.textPrimary }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
-
       {/* Lower grid: 2 columns */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
 
@@ -121,31 +95,32 @@ export function Dashboard() {
             <span style={{ fontSize: '11px', color: K.textFaint }}>{jurisdictions.length} jurisdictions</span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 55px 55px', gap: '4px', marginBottom: '10px', padding: '0 2px' }}>
-            {['Country', 'Covered', 'Pending', 'High'].map(h => (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 65px 75px', gap: '4px', marginBottom: '10px', padding: '0 2px' }}>
+            {['Country', 'Covered', 'To Process', 'High Impact'].map(h => (
               <span key={h} style={{ fontSize: '10px', fontWeight: 600, color: K.textFaint, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>
             ))}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {jurisdictions.map(j => {
-              const pct = j.total > 0 ? Math.round((j.covered / j.total) * 100) : 0;
+              const applicable = j.total - j.irrelevant;
+              const pct = applicable > 0 ? Math.round((j.covered / applicable) * 100) : 0;
               return (
                 <div
                   key={j.country}
                   onClick={() => navigate(`/sources?country=${encodeURIComponent(j.country)}`)}
                   style={{ cursor: 'pointer' }}
                 >
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 55px 55px', gap: '4px', alignItems: 'center', marginBottom: '5px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 65px 75px', gap: '4px', alignItems: 'center', marginBottom: '5px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                       <span style={{ fontSize: '15px', lineHeight: 1 }}>{j.flag}</span>
                       <span style={{ fontSize: '12px', fontWeight: 500, color: K.textPrimary }}>{j.country}</span>
                     </div>
-                    <span style={{ fontSize: '11px', color: K.textSecondary }}>{j.covered}/{j.total}</span>
+                    <span style={{ fontSize: '11px', color: K.textSecondary }}>{j.covered}/{applicable}</span>
                     <span style={{ fontSize: '11px', color: K.textMuted }}>{j.pending}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      {j.high > 5 && <AlertTriangle size={10} style={{ color: '#dc2626' }} />}
-                      <span style={{ fontSize: '11px', color: j.high > 5 ? '#dc2626' : K.textMuted }}>{j.high}</span>
+                      {j.highImpact > 5 && <AlertTriangle size={10} style={{ color: '#dc2626' }} />}
+                      <span style={{ fontSize: '11px', color: j.highImpact > 5 ? '#dc2626' : K.textMuted }}>{j.highImpact}</span>
                     </div>
                   </div>
                   <div style={{ height: '4px', background: K.progressBg, borderRadius: '2px', overflow: 'hidden' }}>
@@ -174,12 +149,11 @@ export function Dashboard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
             {alerts.map(a => {
               const is = impactStyle(a.impact);
-              const ss = statusStyle(a.status);
               return (
                 <div
                   key={a.id}
-                  onClick={() => navigate(`/sources/${a.id}`)}
-                  style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '10px 11px', border: `1px solid ${K.borderSubtle}`, borderRadius: '7px', cursor: 'pointer', transition: 'background 0.12s, border-color 0.12s' }}
+                  onClick={() => navigate('/sources')}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 11px', border: `1px solid ${K.borderSubtle}`, borderRadius: '7px', cursor: 'pointer', transition: 'background 0.12s, border-color 0.12s' }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = K.cardBgHover; (e.currentTarget as HTMLElement).style.borderColor = K.accentBorder; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.borderColor = K.borderSubtle; }}
                 >
@@ -190,9 +164,8 @@ export function Dashboard() {
                       <div style={{ fontSize: '11px', color: K.textFaint, marginTop: '2px' }}>{a.country} &middot; {a.date}</div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', marginLeft: '10px', flexShrink: 0 }}>
+                  <div style={{ marginLeft: '10px', flexShrink: 0 }}>
                     <Badge label={a.impact} style={is} />
-                    <Badge label={a.status} style={ss} />
                   </div>
                 </div>
               );
@@ -255,7 +228,7 @@ export function Dashboard() {
                 return (
                   <div
                     key={p.id}
-                    onClick={() => navigate(`/sources/${p.id}`)}
+                    onClick={() => navigate('/sources')}
                     style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', border: `1px solid ${K.borderSubtle}`, borderRadius: '7px', cursor: 'pointer', transition: 'background 0.12s' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = K.cardBgHover; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
@@ -265,7 +238,7 @@ export function Dashboard() {
                       <div style={{ fontSize: '12px', fontWeight: 500, color: K.textPrimary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</div>
                       <div style={{ fontSize: '11px', color: K.textFaint }}>{p.country} &middot; {p.discovered}</div>
                     </div>
-                    <Badge label={p.status} style={ss} />
+                    <Badge label={statusDisplayLabel(p.status)} style={ss} />
                   </div>
                 );
               })}

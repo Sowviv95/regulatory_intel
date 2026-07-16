@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, useSearchParams } from 'react-router';
 import { Check, Flag, Edit2, ChevronLeft, ChevronRight, ChevronDown, Send, RotateCcw, Search, X, XCircle, MessageSquare } from 'lucide-react';
 import { K } from './kiaa-tokens';
 import { LoadingState, EmptyState, ErrorState } from './StateViews';
@@ -144,21 +144,36 @@ function SourceSearch({ selected, onSelect, sources }: { selected: ReviewSource;
 
 export function RegulationReviewTable() {
   const { sourceId: paramSourceId } = useParams<{ sourceId: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const initialSourceId = paramSourceId ? Number(paramSourceId) : undefined;
+  const sourceFromParam = paramSourceId ? Number(paramSourceId) : undefined;
+  const sourceFromQuery = searchParams.get('source') ? Number(searchParams.get('source')) : undefined;
+  const initialSourceId = sourceFromParam ?? sourceFromQuery;
 
   // Fetch review sources from API
   const { data: allSources, loading: sourcesLoading } = useApi(
     () => fetchReviewSources(), [],
   );
 
+  const [selectedSource, setSelectedSource] = useState<ReviewSource | null>(null);
+  const [catFilter, setCatFilter]           = useState('All');
+  const [statusFilter, setStatusFilter]     = useState('All Statuses');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [commentId, setCommentId] = useState<number | null>(null);
+  const [commentText, setCommentText] = useState('');
+
   const resolvedSource = allSources && initialSourceId
     ? allSources.find(s => s.id === initialSourceId)
     : allSources?.[0];
 
-  const [selectedSource, setSelectedSource] = useState<ReviewSource | null>(null);
-  const [catFilter, setCatFilter]           = useState('All');
-  const [statusFilter, setStatusFilter]     = useState('All Statuses');
+  const activeSource = selectedSource ?? resolvedSource ?? (allSources ? allSources[0] : null);
+
+  // Load fields from API (always called, even when activeSource is null)
+  const { data: fields, loading: fieldsLoading, error: fieldsError, reload } = useApi(
+    () => activeSource ? getFieldsForSource(activeSource.id) : Promise.resolve([]),
+    [activeSource?.id],
+  );
 
   useLayoutEffect(() => {
     if (resolvedSource && (!selectedSource || (initialSourceId && selectedSource.id !== initialSourceId))) {
@@ -179,7 +194,6 @@ export function RegulationReviewTable() {
     );
   }
 
-  const activeSource = selectedSource ?? resolvedSource ?? allSources[0];
   if (!activeSource) {
     return (
       <div style={{ minHeight: 'calc(100vh - 52px)', background: K.pageBg }}>
@@ -188,27 +202,17 @@ export function RegulationReviewTable() {
     );
   }
 
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editValue, setEditValue] = useState('');
-  const [commentId, setCommentId] = useState<number | null>(null);
-  const [commentText, setCommentText] = useState('');
-
   const handleSelectSource = (s: ReviewSource) => {
     setSelectedSource(s);
     setCatFilter('All');
     setStatusFilter('All Statuses');
     setEditingId(null);
     setCommentId(null);
-    navigate(`/sources/${s.id}`, { replace: true });
+    navigate(`/regulations?source=${s.id}`, { replace: true });
   };
 
   const currentIdx = allSources.findIndex(s => s.id === activeSource.id);
   const goTo = (idx: number) => { if (idx >= 0 && idx < allSources.length) handleSelectSource(allSources[idx]); };
-
-  // Load fields from API
-  const { data: fields, loading: fieldsLoading, error: fieldsError, reload } = useApi(
-    () => getFieldsForSource(activeSource.id), [activeSource.id],
-  );
 
   if (fieldsLoading) return <LoadingState message="Loading fields\u2026" />;
   if (fieldsError || !fields) return <ErrorState title="Failed to load fields" message={fieldsError ?? undefined} onRetry={reload} />;

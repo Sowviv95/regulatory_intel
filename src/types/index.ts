@@ -71,7 +71,8 @@ export interface JurisdictionCoverage {
   total: number;
   covered: number;
   pending: number;
-  high: number;
+  irrelevant: number;
+  highImpact: number;
 }
 
 export interface DashboardAlert {

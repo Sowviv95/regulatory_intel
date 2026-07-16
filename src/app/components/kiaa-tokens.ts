@@ -34,8 +34,14 @@ export const impactStyle = (impact: string) => {
   return { bg: 'rgba(107,114,128,0.08)', text: '#6b7280', border: 'rgba(107,114,128,0.18)' };
 };
 
+/** Map backend status values to user-facing display labels. */
+export const statusDisplayLabel = (status: string): string => {
+  if (status === 'New') return 'To Process';
+  return status;
+};
+
 export const statusStyle = (status: string) => {
-  if (status === 'New') return { bg: 'rgba(59,130,246,0.08)', text: '#2563eb', border: 'rgba(59,130,246,0.18)' };
+  if (status === 'New' || status === 'To Process') return { bg: 'rgba(59,130,246,0.08)', text: '#2563eb', border: 'rgba(59,130,246,0.18)' };
   if (status === 'Processing') return { bg: 'rgba(245,158,11,0.08)', text: '#d97706', border: 'rgba(245,158,11,0.18)' };
   if (status === 'Ready for Review') return { bg: 'rgba(22,163,74,0.08)', text: '#16a34a', border: 'rgba(22,163,74,0.18)' };
   if (status === 'Approved') return { bg: 'rgba(22,163,74,0.10)', text: '#15803d', border: 'rgba(22,163,74,0.22)' };

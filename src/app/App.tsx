@@ -26,7 +26,6 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/sources" element={<SourceQueue />} />
-            <Route path="/sources/:sourceId" element={<RegulationReviewTable />} />
             <Route path="/regulations" element={<RegulationReviewTable />} />
             <Route path="/regulations/:regulationId" element={<RegulationReview />} />
             <Route path="/search" element={<SearchExport />} />

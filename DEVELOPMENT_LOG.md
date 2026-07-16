@@ -660,6 +660,104 @@ Harden the PoC for a stable customer demo with repeatable setup, structured logg
 
 ---
 
+### Defect Fix -- RI-TEST-001 (16 July 2026)
+
+**Defect ID:** RI-TEST-001
+**Severity:** High
+**Workflow:** Frontend startup/runtime -- application crashes immediately on load
+
+**Root cause:**
+`SourceQueue.tsx:278` referenced an undefined callback `refresh` in `onClick={refresh}`. The `useApi` hook returns `reload`, not `refresh`. The identifier `refresh` was never defined in the component scope, causing a `ReferenceError` at render time. Because `SourceQueue` is loaded eagerly as a route component, the error propagated to the React error boundary on every page load, including the Dashboard.
+
+**Fix:**
+Changed `onClick={refresh}` to `onClick={reload}` on line 278 of `src/app/components/SourceQueue.tsx`.
+
+**Files changed:**
+- src/app/components/SourceQueue.tsx (1 line)
+- DEVELOPMENT_LOG.md (this entry)
+
+**Validation performed:**
+- `pnpm run build`: succeeded
+- 67 backend tests: all passed
+- Confirmed no other undefined `refresh` or `onRefresh` references exist in frontend components
+
+---
+
+### RI-TEST-002 – Fix `countries is not defined` in SourceQueue.tsx
+
+**Date:** 16 July 2026
+
+**Status:** Completed
+
+**Defect:** `ReferenceError: countries is not defined` at SourceQueue.tsx:311 on initial render. The `countries` and `docTypes` variables were referenced in `FilterDropdown` props but never declared.
+
+**Root cause:** The filter dropdowns on lines 311-312 referenced `countries` and `docTypes` variables that were never defined anywhere in the component, its imports, or props. These should have been derived from the loaded source data.
+
+**Fix:** Added two derived constants before the JSX return, computing unique sorted country and docType values from `allRows`:
+```ts
+const countries = [...new Set(allRows.map(r => r.country))].sort();
+const docTypes = [...new Set(allRows.map(r => r.docType))].sort();
+```
+
+**Files modified**
+- `src/app/components/SourceQueue.tsx` — added derived `countries` and `docTypes` arrays (2 lines)
+
+**Validation performed**
+- `pnpm run build`: succeeded (300.86 KB JS, 87.09 KB CSS, 1.54s)
+- 67 backend tests: all passed
+- Scanned entire SourceQueue.tsx for other undeclared identifiers: none found
+
+---
+
+### RI-TEST-003 – Fix "Rendered more hooks than during the previous render" on Review tab
+
+**Date:** 16 July 2026
+
+**Status:** Completed
+
+**Defect ID:** RI-TEST-003
+**Severity:** High
+**Workflow:** Regulation Review initial render/navigation
+
+**Reproduction steps:**
+1. Start backend and frontend.
+2. Open the Dashboard — loads successfully.
+3. Click the "Review" tab in the top navigation.
+4. Application falls into the error boundary with: "Rendered more hooks than during the previous render."
+
+**Root cause:**
+`RegulationReviewTable.tsx` violated React's Rules of Hooks by declaring `useState` and `useApi` hooks **after** early-return statements.
+
+Hook execution order on first render (loading = true):
+- Hooks 1-3: `useParams`, `useNavigate`, `useApi` (fetchReviewSources)
+- Hooks 4-6: `useState` (selectedSource, catFilter, statusFilter)
+- Hook 7: `useLayoutEffect`
+- **Line 172: early return** (`sourcesLoading` is true) — component exits here
+
+Hook execution order on subsequent render (loading = false):
+- Hooks 1-7: same as above
+- **Hooks 8-11:** `useState` (editingId, editValue, commentId, commentText) — line 191-194
+- **Hook 12:** `useApi` (getFieldsForSource) — line 209
+
+React detected more hooks on re-render than on first render and threw the error.
+
+Additionally, `useLayoutEffect` on line 163 referenced `setEditingId` (from line 191) before that `useState` was declared, which would also cause a runtime error if reached.
+
+**Fix:**
+Moved all `useState` declarations (editingId, editValue, commentId, commentText) and the `useApi(getFieldsForSource)` call to **before** any early returns, immediately after the existing hook declarations. The `useApi` call now handles a null `activeSource` by returning an empty array via `Promise.resolve([])`. Early returns for loading, error, and empty states remain in place but occur only after all hooks have executed.
+
+**Files changed:**
+- `src/app/components/RegulationReviewTable.tsx` — reordered hooks to top level (no hooks after early returns)
+- `DEVELOPMENT_LOG.md` — added this entry
+
+**Validation performed:**
+- `pnpm run build`: succeeded (300.90 KB JS, 87.09 KB CSS, 1.69s)
+- 67 backend tests: all passed
+- All hooks now execute unconditionally on every render
+- No hooks remain after any early-return statement
+
+---
+
 ## Sprint Tracking Template
 
 ### Sprint X – Sprint Name
@@ -693,3 +791,436 @@ Describe the primary sprint objective.
 
 **Next steps**
 - Next action
+
+---
+
+### RI-TEST-014 — Source Queue Processing Transition
+
+**Date:** 16 July 2026
+
+**Defect ID:** RI-TEST-014
+
+**Severity:** Medium
+
+**Previous behaviour**
+- Clicking Process immediately set the source to Processing via a single backend call, then reloaded the page. The source jumped to the Processing tab with no visible transition and no automatic progression to Ready for Review.
+
+**Corrected behaviour**
+- Clicking Process now triggers a two-phase transition:
+  1. Backend PATCH sets status to Processing (persisted immediately).
+  2. Frontend waits 2.5 seconds while showing a spinner and "Processing…" label.
+  3. Backend PATCH sets status to Ready for Review (persisted on completion).
+- During the transition: spinner visible, action buttons disabled, repeated clicks prevented.
+- If phase 2 fails: source remains in Processing, "Transition failed" message shown with Retry button.
+- If phase 1 fails: source stays in current status, page reloads.
+- Browser refresh during delay shows persisted Processing status with standard Retry/Irrelevant actions.
+
+**Implementation**
+- Frontend only — no backend changes required. Backend already supported Processing and Ready for Review statuses with started_at/completed_at timestamps.
+- Added `processingIds` and `failedIds` state sets in SourceQueue.tsx to track in-flight and failed transitions.
+- Added `runProcessingTransition()` for two-phase flow and `retryReadyTransition()` for retrying failed phase-2.
+- Extended `ActionBtn` with `disabled` prop for visual/interaction disable.
+- Processing row shows animated Loader spinner with "Processing…" label in purple (#7c3aed).
+- Failed row shows "Transition failed" text with Retry and Irrelevant actions.
+- Bulk Process and Process All use the same two-phase flow for each source.
+- Added 4 backend tests for status transition validation.
+
+**Files changed**
+- `src/app/components/SourceQueue.tsx` — processing transition logic, spinner, disabled states, error handling
+- `backend/tests/test_api.py` — 4 new tests: New→Processing, Processing→Ready, Restore→New, 404 on missing source
+
+**Validation**
+- `pytest`: 71 passed (67 existing + 4 new), 1 warning, 1.43s
+- `pnpm run build`: success, 302.51 KB JS, 87.09 KB CSS, 1.55s
+
+**Known PoC limitations**
+- The 2.5s delay is a frontend timer, not real processing — suitable for demo only.
+- If the browser is closed during the delay, the source remains in Processing; the existing Retry action allows manual recovery.
+- No server-side timeout or auto-recovery for stuck Processing records.
+- Bulk Process All fires transitions concurrently — many sources may animate simultaneously.
+
+---
+
+### RI-TEST-014 (cont.) — Status Model: "New" → "To Process" Rename
+
+**Date:** 16 July 2026
+
+**Defect ID:** RI-TEST-014 (status model correction)
+
+**Previous behaviour**
+- Sources waiting for processing were labelled "New" in the Source Queue tabs, status badges, Dashboard KPI cards, Dashboard alerts, and Dashboard Oldest Pending list.
+- The label "New" did not clearly communicate the required user action.
+
+**Corrected status model**
+- User-facing label: **To Process** → **Processing** → **Ready for Review**
+- Backend/DB value: `New` → `Processing` → `Ready for Review` (unchanged)
+- Frontend maps `"New"` to `"To Process"` via `statusDisplayLabel()` in `kiaa-tokens.ts`.
+- No database migration performed. API contract preserved.
+
+**Implementation**
+- Added `statusDisplayLabel()` to `kiaa-tokens.ts`: maps `"New"` → `"To Process"`, passes all other statuses through unchanged.
+- Updated `statusStyle()` to also match `"To Process"` with the same blue styling as `"New"`.
+- Updated `SourceQueue.tsx`: tabs, status badges (table + detail panel), and button label ("Process All" instead of "Process All New") all use `statusDisplayLabel()`.
+- Updated `Dashboard.tsx`: "Recent Sources" alert badges and "Oldest Pending" badges use `statusDisplayLabel()`.
+- Updated `dashboard.py`: KPI delta text changed from `"X new"` to `"X to process"`.
+- Backend status values, API responses, URL query parameters, and seed data all retain `"New"` internally.
+
+**Files changed**
+- `src/app/components/kiaa-tokens.ts` — `statusDisplayLabel()`, `statusStyle()` accepts "To Process"
+- `src/app/components/SourceQueue.tsx` — display labels in tabs, badges, detail panel, button text
+- `src/app/components/Dashboard.tsx` — display labels in alert and pending badges
+- `backend/routers/dashboard.py` — KPI delta text "X to process"
+
+**Validation**
+- `pytest`: 71 passed, 1 warning, 1.39s
+- `pnpm run build`: success, 302.58 KB JS, 87.09 KB CSS, 1.51s
+- Source Queue tabs show "To Process" (not "New")
+- Dashboard badges show "To Process" (not "New")
+- Dashboard KPI shows "X to process" (not "X new")
+- Backend API still returns `"New"` — no API contract break
+- URL param `?status=New` still works for navigation from Dashboard
+
+**Known PoC limitations**
+- URL query parameter still uses `?status=New` (matches backend value). Users don't see this in the UI.
+- Static mock data files in `src/data/` still reference `"New"` — these are not used when the backend is running.
+
+---
+
+### RI-TEST-015 — Intelligence Library Filter Defect
+
+**Date:** 16 July 2026
+
+**Defect ID:** RI-TEST-015
+
+**Severity:** High
+
+**Reproduction steps**
+1. Open Intelligence Library (`/search`).
+2. Click any saved view in the left panel (e.g. "High Impact — APAC").
+3. Observe: the visual highlight changes but the displayed rows do not change.
+4. Click any filter chip (Jurisdiction, Category, etc.) and select a value.
+5. Observe: a full-page loading spinner flashes, then data reloads — but due to the dual-fetch architecture (two `useApi` hooks), the filtered API call races with the initial load and may flash or appear inconsistent.
+
+**Root cause**
+Two separate issues:
+
+1. **Saved Views non-functional**: Clicking a saved view only set `activeView` state for visual highlighting. No filter criteria were mapped to views and no filtering was applied. Saved view names and counts were hardcoded from stale mock data (`src/data/search.ts`) and did not reflect live database content.
+
+2. **Dual-fetch architecture**: The component used two separate `useApi` hooks — one for unfiltered data (dropdown population) and one for filtered data (server-side filtering). When filter chips changed, the filtered hook triggered a full server re-fetch, causing a full-page `<LoadingState>` flash. While the API response was correct, the user experience was jarring and the two-hook pattern was unnecessarily complex.
+
+**Fix applied**
+- **Switched to single-fetch client-side filtering**: One `useApi` call fetches all records once. Filter chips and saved views now filter client-side, providing instant response with no loading flash. This is appropriate for the PoC dataset size (726 records).
+- **Made saved views functional**: Defined `VIEW_DEFINITIONS` with predicate functions. Each view (All Regulations, APAC Region, EU/EEA, Middle East, Assessment Fields, Low Confidence) maps to a `match` function that filters the dataset. Clicking a view applies its filter, clears chip filters and search, and clears selection.
+- **Dynamic saved-view counts**: Counts are computed from live data, not hardcoded.
+- **AND logic**: Saved view filter is applied first; then chip filters layer on top with AND logic.
+- **Fixed undefined `SearchFilters` type**: Replaced with local `SortCol` type alias.
+- **Selection cleared on filter change**: `clearFilters()` and `selectView()` both reset the selection set.
+
+**Files changed**
+- `src/app/components/SearchExport.tsx` — replaced dual-fetch with single-fetch, added view definitions, client-side filtering, dynamic counts, fixed type reference
+- `backend/tests/test_api.py` — 6 new search filter tests
+- `DEVELOPMENT_LOG.md` — this entry
+
+**Validation**
+- `pytest`: 77 passed (71 existing + 6 new search tests), 1 warning, 2.30s
+- `pnpm run build`: success, 303.66 KB JS, 87.09 KB CSS, 2.12s
+- Backend filter tests: jurisdiction, category, status, confidence, combined, text search, empty result — all pass
+- Client-side filter logic verified: All(726), APAC(351), EU/EEA(195), Middle East(180), Assessment(180), Low Confidence(6)
+- Combined filters produce correct AND results (e.g. APAC+Content=87)
+- Search text matches across multiple fields
+- No extracted or reviewed data modified
+
+**Known PoC limitations**
+- Client-side filtering loads all 726 records on page load — suitable for PoC but would need server-side pagination for production scale.
+- Saved views are defined in code, not user-configurable. The "Save current view" button remains a placeholder.
+- Source type, Tobacco product, Sub-product, Impact, and Likelihood are not yet available as independent filter chips — they can be found via text search or by browsing field values.
+- The "Active Alerts" section in the left panel remains static.
+
+---
+
+### RI-TEST-016 — Remove Redundant Dashboard KPI Strip
+
+**Date:** 16 July 2026
+
+**Change ID:** RI-TEST-016
+
+**Severity:** Low
+
+**Section removed**
+- Six-card horizontal stats bar showing: Regulations, Accepted, Rejected, Flagged, Low Confidence, Evidence coverage.
+- Located between the KPI cards and the two-column grid (Jurisdiction Coverage / Recent Sources).
+
+**Implementation**
+- Removed the stats bar `<div>` and its six card items from `Dashboard.tsx`.
+- Removed unused `stats` from the `data` destructure.
+- Removed unused `ShieldCheck` icon import (only used in the stats bar).
+- No backend API or data changes — stats fields remain in the API response for potential use elsewhere.
+
+**Files changed**
+- `src/app/components/Dashboard.tsx` — removed stats bar, unused destructure, unused import
+
+**Spacing adjustment**
+- The two-column grid (`marginBottom: '20px'`) moves up directly below the KPI cards (`marginBottom: '20px'`). No extra CSS changes needed; the existing margins produce clean spacing.
+
+**Validation**
+- `pytest`: 77 passed, 1 warning, 2.21s
+- `pnpm run build`: success, 301.76 KB JS, 87.09 KB CSS, 2.24s
+
+---
+
+### RI-TEST-017 — Dashboard Jurisdiction Coverage Reconciliation
+
+**Date:** 16 July 2026
+
+**Change ID:** RI-TEST-017
+
+**Severity:** Medium
+
+**Cause of the Taiwan discrepancy**
+Taiwan has 15 total sources: 13 Ready for Review, 1 Processing, 1 Irrelevant. The old query counted `total = 15` (all statuses) but `covered = 14` (Processing + Ready for Review only). The Irrelevant source was in the denominator but in neither numerator, producing `14/15 = 93%`. The correct applicable total excluding Irrelevant is 14, giving `14/14 = 100%`.
+
+**Definitions before the fix**
+- Covered: sources with status IN ('Ready for Review', 'Processing')
+- Pending: sources with status = 'New'
+- High: sources where `Sector Impact` field = 'High' (label unexplained)
+- Percentage: covered / total (total includes Irrelevant)
+
+**Definitions after the fix**
+- Covered: sources with status IN ('Ready for Review', 'Processing') — unchanged
+- To Process: sources with status = 'New' — renamed from "Pending"
+- Irrelevant: sources with status = 'Irrelevant' — new, returned by API
+- High Impact: sources where `Sector Impact` field = 'High' — renamed from "High"
+- Applicable: total - irrelevant
+- Percentage: covered / applicable × 100
+
+**Reconciliation invariant**: covered + pending + irrelevant = total (tested)
+
+**Meaning of High Impact metric**
+Counts distinct sources that have at least one `regulation_fields` row where `field_name = 'Sector Impact'` and `extracted_value = 'High'`. This represents sources with a high regulatory impact assessment from the Tamarind extraction.
+
+**Files changed**
+- `backend/routers/dashboard.py` — added `irrelevant` count, renamed `high` → `high_impact` / `highImpact`
+- `src/types/index.ts` — updated `JurisdictionCoverage` interface: added `irrelevant`, renamed `high` → `highImpact`
+- `src/app/components/Dashboard.tsx` — updated column headers ("To Process", "High Impact"), percentage uses applicable denominator, fraction shows `covered/applicable`
+- `backend/tests/test_dashboard.py` — added `test_jurisdiction_fields_present`, `test_jurisdiction_reconciliation`
+
+**Validation**
+- `pytest`: 79 passed (77 existing + 2 new), 1 warning, 1.51s
+- `pnpm run build`: success, 301.79 KB JS, 87.09 KB CSS, 1.49s
+- All 7 jurisdictions reconcile: covered + pending + irrelevant = total
+- Taiwan now shows 14/14 = 100% (was 14/15 = 93%)
+
+**Known PoC limitations**
+- Processing sources are grouped with Ready for Review in "Covered". For the PoC this is acceptable since Processing is a transient state.
+- The "High Impact" threshold (> 5) for the warning triangle icon is hardcoded.
+
+---
+
+### RI-TEST-018 — Dashboard Recent Sources Card and Navigation
+
+**Date:** 16 July 2026
+
+**Change ID:** RI-TEST-018
+
+**Severity:** Medium
+
+**Previous behaviour**
+- Each Recent Sources entry displayed two badges: an Impact badge (e.g. "High", "Medium") and a status badge ("Ready for Review" / "To Process"). The status badge was redundant because the card context already implies recent sources.
+- Clicking a Recent Sources entry navigated to `/sources/${sourceId}` which rendered `RegulationReviewTable` — the same component used by the Review tab (`/regulations`) and Source Queue Review action.
+
+**Root cause of perceived layout inconsistency**
+Investigation confirmed that all three entry points (Dashboard Recent Sources, Source Queue Review, TopNav Review tab) already render the **same component** (`RegulationReviewTable`). The only difference is URL path: Dashboard and Source Queue use `/sources/:sourceId` (pre-selects a specific source), while the Review tab uses `/regulations` (defaults to the first source). Both routes map to `RegulationReviewTable` in `App.tsx` lines 29-30. No second review implementation exists. The perceived inconsistency was the redundant status badge, not a layout difference.
+
+**Changes made**
+1. Removed the "Ready for Review" / "To Process" status badge from each Recent Sources entry.
+2. Kept the Impact badge (High / Medium / Low) as the sole right-aligned badge.
+3. Changed row alignment from `alignItems: 'flex-start'` to `alignItems: 'center'` for cleaner single-badge layout.
+4. Simplified the badge container from a vertical flex column to a single element.
+5. No navigation changes — `/sources/${a.id}` already renders the correct shared component.
+
+**Navigation route (unchanged)**
+- Recent Sources: `/sources/${sourceId}` → `RegulationReviewTable` (source pre-selected)
+- Source Queue Review: `/sources/${sourceId}` → `RegulationReviewTable` (same)
+- TopNav Review tab: `/regulations` → `RegulationReviewTable` (defaults to first source)
+- Detail view: `/regulations/${regulationId}` → `RegulationReview` (opened from any of the above)
+
+**Files changed**
+- `src/app/components/Dashboard.tsx` — removed status badge from Recent Sources, simplified layout
+
+**Validation**
+- `pytest`: 79 passed, 1 warning, 1.52s
+- `pnpm run build`: success, 301.66 KB JS, 87.09 KB CSS, 1.51s
+
+---
+
+### RI-TEST-018A — Dashboard → Source Queue Layout Inconsistency
+
+**Date:** 16 July 2026
+
+**Change ID:** RI-TEST-018A
+
+**Severity:** Medium
+
+**Previous behaviour**
+- Clicking a Recent Source or Oldest Pending item navigated to `/sources/${id}`.
+- Route `/sources/:sourceId` rendered `RegulationReviewTable` (the review table component), not `SourceQueue`.
+- This produced a completely different layout from the normal Source Queue tab (`/sources` → `SourceQueue`).
+
+**Root cause**
+The route `/sources/:sourceId` was mapped to `RegulationReviewTable` in `App.tsx` line 29. Dashboard navigation used this parameterised route, bypassing `SourceQueue` entirely.
+
+**Fix**
+- Dashboard Recent Sources and Oldest Pending now navigate to `/sources?source=${id}` instead of `/sources/${id}`.
+- This hits the `/sources` route → `SourceQueue` component.
+- `SourceQueue` reads the `source` search param and auto-opens the detail panel for that source once data loads.
+- A one-time `useEffect` with `initialDetailApplied` guard prevents re-triggering.
+- The `/sources/:sourceId` → `RegulationReviewTable` route is preserved for the Source Queue "Review" button, Intelligence Library, and internal review navigation.
+
+**Route and component before and after**
+
+| Entry point | Before | After |
+|---|---|---|
+| Recent Sources click | `/sources/66` → `RegulationReviewTable` | `/sources?source=66` → `SourceQueue` (detail panel open) |
+| Oldest Pending click | `/sources/3` → `RegulationReviewTable` | `/sources?source=3` → `SourceQueue` (detail panel open) |
+| Source Queue Review button | `/sources/66` → `RegulationReviewTable` | Unchanged |
+| TopNav Source Queue | `/sources` → `SourceQueue` | Unchanged |
+
+**Files changed**
+- `src/app/components/Dashboard.tsx` — changed Recent Sources and Oldest Pending navigation to `/sources?source=${id}`
+- `src/app/components/SourceQueue.tsx` — added `source` search param reading, `useEffect` to auto-open detail panel
+
+**Validation**
+- `pytest`: 79 passed, 1 warning, 1.94s
+- `pnpm run build`: success, 301.90 KB JS, 87.09 KB CSS, 1.74s
+
+---
+
+### RI-TEST-019 — Simplify Source Queue Workflow
+
+**Date:** 16 July 2026
+
+**Change ID:** RI-TEST-019
+
+**Severity:** Medium
+
+**Previous workflow**
+- To Process → Processing (persisted) → Ready for Review
+- Processing appeared as a tab, summary card ("Active Jobs"), filter option, and stable status badge
+- Two-phase API: first PATCH to Processing, then PATCH to Ready for Review
+- 5 sources persisted as Processing in DB (3 with regulations, 2 without)
+
+**Simplified workflow**
+- To Process → (frontend spinner ~2.5s) → Ready for Review
+- Processing is purely a transient frontend indicator, never persisted
+- Single API call: PATCH directly to Ready for Review after the demo delay
+- Source stays as New in backend during the spinner delay
+- Browser refresh during delay shows the source in To Process (safe)
+
+**Persisted Processing records handled**
+- src_id=1 (Taiwan, has regulation) → Ready for Review
+- src_id=2 (South Korea, has regulation) → Ready for Review
+- src_id=5 (Finland, has regulation) → Ready for Review
+- src_id=8 (South Korea, no regulation) → New
+- src_id=11 (Poland, no regulation) → New
+- Final DB: 60 Ready for Review, 5 New, 1 Irrelevant, 0 Processing
+
+**Changes**
+- Removed Processing from `ALL_TABS` — no Processing tab
+- Removed "Active Jobs" summary card, replaced with "To Process" card
+- Simplified transition: frontend-only spinner for 2.5s, then single PATCH to Ready for Review
+- Removed `retryReadyTransition`, `retry` functions (no persisted Processing to retry)
+- Failure now keeps source in To Process with "Failed" + Retry on the same row
+- Fixed Review button: changed `row.sourceId` (undefined) to `row.id` (correct source ID)
+- Updated backend tests: replaced Processing transition tests with direct New→Ready for Review tests
+- Updated dashboard test: source status change test uses Ready for Review instead of Processing
+
+**Files changed**
+- `src/app/components/SourceQueue.tsx` — removed Processing tab/card/actions, simplified transition, fixed Review button
+- `backend/tests/test_api.py` — updated status transition tests
+- `backend/tests/test_dashboard.py` — updated status change test
+- `backend/data/regulatory_intel.db` — remapped 5 Processing records (data change, not schema change)
+
+**Validation**
+- `pytest`: 79 passed, 1 warning, 1.69s
+- `pnpm run build`: success, 301.10 KB JS, 87.09 KB CSS, 1.55s
+- 0 Processing records remain in DB
+- Final counts: 60 Ready for Review, 5 New, 1 Irrelevant
+
+**Known PoC limitations**
+- Backend API still accepts Processing as a valid status value (no validation added) — harmless for PoC
+- The `SourceStatus` TypeScript type still includes 'Processing' — used for transient frontend state only
+- Dashboard jurisdiction query still counts Processing as "covered" — no impact since no records have this status
+
+---
+
+### RI-TEST-020 — Remove Source Details Side Pane
+
+**Date:** 16 July 2026
+
+**Change ID:** RI-TEST-020
+
+**Removed**
+- `DetailPanel` component (fixed right-side panel showing source metadata)
+- `detailSource` / `setDetailSource` state
+- `initialDetailApplied` state and auto-open `useEffect` for `?source=` param
+- `initialSourceId` search param reading
+- Row click handler that opened the panel
+- "Details" action button on Ready for Review rows
+- `Eye` and `FileText` icon imports (only used by removed code)
+
+**Behaviour after removal**
+- Clicking a Ready for Review row navigates to `/sources/:id` (Review tab)
+- Clicking To Process or Irrelevant rows has no row-level click action
+- Dashboard Recent Sources and Oldest Pending navigate to `/sources` (Source Queue)
+- All other Source Queue behaviour (table, filters, tabs, selection, actions) unchanged
+
+**Files changed**
+- `src/app/components/SourceQueue.tsx` — removed DetailPanel, state, effect, handlers, imports
+- `src/app/components/Dashboard.tsx` — simplified navigation to `/sources`
+
+**Validation**
+- `pytest`: 79 passed, 1 warning, 1.70s
+- `pnpm run build`: success, 298.13 KB JS (−3 KB), 87.09 KB CSS, 1.55s
+
+---
+
+### RI-TEST-021 — Fix Navigation-State Bug Between Source Queue and Review
+
+**Date:** 16 July 2026
+
+**Defect ID:** RI-TEST-021
+
+**Severity:** High
+
+**Root cause**
+The Source Queue "Review" button navigated to `/sources/${row.id}`, and route `/sources/:sourceId` rendered `RegulationReviewTable`. However, TopNav's `isActive` function matched any path starting with `/sources` to the Source Queue tab. This meant `/sources/42` activated Source Queue in the nav while rendering Review content — a hybrid/incorrect state.
+
+**Previous navigation mechanism**
+- Source Queue Review → `/sources/:id` → `RegulationReviewTable` (Source Queue tab highlighted)
+- Review tab → `/regulations` → `RegulationReviewTable` (Review tab highlighted)
+- Same component, different routes, wrong tab activation for the first path
+
+**Fix**
+- All review navigation now uses `/regulations?source=<id>` instead of `/sources/<id>`
+- `RegulationReviewTable` reads the `source` query param in addition to `sourceId` route param
+- Removed the `/sources/:sourceId` route from `App.tsx`
+- Internal source switching in `RegulationReviewTable` uses `/regulations?source=<id>`
+- "Table View" button in `RegulationReview` uses `/regulations?source=<id>`
+- Intelligence Library "Open table view" uses `/regulations?source=<id>`
+
+**Final route/tab logic**
+- `/sources` → Source Queue tab active, `SourceQueue` component
+- `/regulations` → Review tab active, `RegulationReviewTable` component
+- `/regulations?source=42` → Review tab active, `RegulationReviewTable` with source 42 preselected
+- `/regulations/:regulationId` → Review tab active, `RegulationReview` detail component
+
+**Files changed**
+- `src/app/App.tsx` — removed `/sources/:sourceId` route
+- `src/app/components/SourceQueue.tsx` — Review button and row click navigate to `/regulations?source=<id>`
+- `src/app/components/RegulationReviewTable.tsx` — reads `source` from search params, internal nav uses `/regulations?source=<id>`
+- `src/app/components/RegulationReview.tsx` — "Table View" button uses `/regulations?source=<id>`
+- `src/app/components/SearchExport.tsx` — "Open table view" uses `/regulations?source=<id>`
+
+**Validation**
+- `pytest`: 79 passed, 1 warning, 1.55s
+- `pnpm run build`: success, 298.23 KB JS, 87.09 KB CSS, 1.46s

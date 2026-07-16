@@ -291,3 +291,112 @@ def test_persistence_across_restart():
     row = conn.execute("SELECT status FROM regulation_fields WHERE id = 10").fetchone()
     conn.close()
     assert row["status"] == "Accepted"
+
+
+# -- Source status transitions -----------------------------------------------
+
+def test_source_new_to_ready():
+    """PATCH source directly from New to Ready for Review sets completed_at."""
+    r = client.patch("/api/sources/1", json={"status": "Ready for Review", "stage": "Analyst Review"})
+    assert r.status_code == 200
+    d = r.json()["data"]
+    assert d["status"] == "Ready for Review"
+    assert d["stage"] == "Analyst Review"
+    assert d["completedAt"] is not None
+
+
+def test_source_new_to_irrelevant():
+    """PATCH source from New to Irrelevant."""
+    # Reset to New first
+    client.patch("/api/sources/2", json={"status": "New", "stage": "Awaiting Extraction"})
+    r = client.patch("/api/sources/2", json={"status": "Irrelevant", "stage": "Discarded"})
+    assert r.status_code == 200
+    assert r.json()["data"]["status"] == "Irrelevant"
+
+
+def test_source_restore_to_new():
+    """PATCH source back to New from Irrelevant."""
+    client.patch("/api/sources/2", json={"status": "Irrelevant", "stage": "Discarded"})
+    r = client.patch("/api/sources/2", json={"status": "New", "stage": "Awaiting Extraction"})
+    assert r.status_code == 200
+    assert r.json()["data"]["status"] == "New"
+
+
+def test_source_patch_not_found():
+    """PATCH non-existent source returns 404."""
+    r = client.patch("/api/sources/9999", json={"status": "Ready for Review"})
+    assert r.status_code == 404
+
+
+# -- Search / Intelligence Library filters -----------------------------------
+
+def test_search_no_filters():
+    """GET /api/search with no filters returns all records."""
+    r = client.get("/api/search")
+    assert r.status_code == 200
+    data = r.json()["data"]
+    # Seed data: 12 sources × ~10-13 fields each
+    assert len(data) > 0
+    # Every record must have required keys
+    assert all("jurisdiction" in d and "fieldName" in d for d in data)
+
+
+def test_search_filter_jurisdiction():
+    """Jurisdiction filter returns only matching records."""
+    r = client.get("/api/search?jurisdiction=Taiwan")
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert len(data) > 0
+    assert all(d["jurisdiction"] == "Taiwan" for d in data)
+
+
+def test_search_filter_category():
+    """Category filter returns only matching records."""
+    r = client.get("/api/search?category=Assessment")
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert len(data) > 0
+    assert all(d["category"] == "Assessment" for d in data)
+
+
+def test_search_filter_status():
+    """Status filter returns only matching records."""
+    r = client.get("/api/search?status=Pending")
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert len(data) > 0
+    assert all(d["status"] == "Pending" for d in data)
+
+
+def test_search_filter_confidence():
+    """Confidence=Low returns only records with confidence < 75."""
+    r = client.get("/api/search?confidence=Low")
+    assert r.status_code == 200
+    data = r.json()["data"]
+    # May have 0 low-confidence in seed data
+    for d in data:
+        assert d["confidence"] < 75
+
+
+def test_search_filter_combined():
+    """Combined filters apply AND logic."""
+    r = client.get("/api/search?jurisdiction=Taiwan&category=Metadata")
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert len(data) > 0
+    assert all(d["jurisdiction"] == "Taiwan" and d["category"] == "Metadata" for d in data)
+
+
+def test_search_text_query():
+    """Text search matches across multiple fields."""
+    r = client.get("/api/search?q=tobacco")
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert len(data) > 0
+
+
+def test_search_no_results():
+    """Non-matching filter returns empty list, not error."""
+    r = client.get("/api/search?jurisdiction=Atlantis")
+    assert r.status_code == 200
+    assert r.json()["data"] == []
