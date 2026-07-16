@@ -215,9 +215,12 @@ export function SearchExport() {
   const [showExportSummary, setShowExportSummary] = useState(false);
   const [exported, setExported] = useState(false);
 
-  const jurisdictions = getUniqueJurisdictions();
-  const sourceTitles = getUniqueSourceTitles();
   const savedViews = getSavedViews();
+
+  // Load all records initially for filter dropdown population
+  const { data: allRecords } = useApi(() => searchRecords({}), []);
+  const jurisdictions = allRecords ? getUniqueJurisdictions(allRecords) : [];
+  const sourceTitles = allRecords ? getUniqueSourceTitles(allRecords) : [];
 
   const { data: filtered, loading, error, reload } = useApi(
     () => searchRecords({ q: query, jurisdiction, category, status, confidence, source }),

@@ -4,7 +4,7 @@ import { Check, Flag, Edit2, ChevronLeft, ChevronRight, ChevronDown, Send, Rotat
 import { K } from './kiaa-tokens';
 import { LoadingState, EmptyState, ErrorState } from './StateViews';
 import {
-  getReviewSources, getReviewSourceById, getFieldsForSource,
+  fetchReviewSources, getReviewSources, getReviewSourceById, getFieldsForSource,
   acceptField, rejectField, flagField, resetField, editFieldValue,
   addFieldComment, acceptAllFields, getReviewStats,
 } from '../../services/regulations';
@@ -73,11 +73,11 @@ function FilterSelect({ value, options, onChange }: { value: string; options: st
   );
 }
 
-function SourceSearch({ selected, onSelect }: { selected: ReviewSource; onSelect: (s: ReviewSource) => void }) {
+function SourceSearch({ selected, onSelect, sources }: { selected: ReviewSource; onSelect: (s: ReviewSource) => void; sources: ReviewSource[] }) {
   const [open, setOpen]   = useState(false);
   const [query, setQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
-  const allSources = getReviewSources();
+  const allSources = sources;
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -145,12 +145,31 @@ function SourceSearch({ selected, onSelect }: { selected: ReviewSource; onSelect
 export function RegulationReviewTable() {
   const { sourceId: paramSourceId } = useParams<{ sourceId: string }>();
   const navigate = useNavigate();
-  const allSources = getReviewSources();
   const initialSourceId = paramSourceId ? Number(paramSourceId) : undefined;
 
-  const resolvedSource = initialSourceId
-    ? getReviewSourceById(initialSourceId)
-    : allSources[0];
+  // Fetch review sources from API
+  const { data: allSources, loading: sourcesLoading } = useApi(
+    () => fetchReviewSources(), [],
+  );
+
+  const resolvedSource = allSources && initialSourceId
+    ? allSources.find(s => s.id === initialSourceId)
+    : allSources?.[0];
+
+  const [selectedSource, setSelectedSource] = useState<ReviewSource | null>(null);
+  const [catFilter, setCatFilter]           = useState('All');
+  const [statusFilter, setStatusFilter]     = useState('All Statuses');
+
+  useLayoutEffect(() => {
+    if (resolvedSource && (!selectedSource || (initialSourceId && selectedSource.id !== initialSourceId))) {
+      setSelectedSource(resolvedSource);
+      setCatFilter('All');
+      setStatusFilter('All Statuses');
+      setEditingId(null);
+    }
+  }, [resolvedSource?.id, initialSourceId]);
+
+  if (sourcesLoading || !allSources) return <LoadingState message="Loading sources\u2026" />;
 
   if (initialSourceId && !resolvedSource) {
     return (
@@ -160,22 +179,14 @@ export function RegulationReviewTable() {
     );
   }
 
-  const startSource = resolvedSource ?? allSources[0];
-
-  const [selectedSource, setSelectedSource] = useState<ReviewSource>(startSource);
-  const [catFilter, setCatFilter]           = useState('All');
-  const [statusFilter, setStatusFilter]     = useState('All Statuses');
-
-  useLayoutEffect(() => {
-    if (!initialSourceId) return;
-    const match = getReviewSourceById(initialSourceId);
-    if (match && match.id !== selectedSource.id) {
-      setSelectedSource(match);
-      setCatFilter('All');
-      setStatusFilter('All Statuses');
-      setEditingId(null);
-    }
-  }, [initialSourceId]);
+  const activeSource = selectedSource ?? resolvedSource ?? allSources[0];
+  if (!activeSource) {
+    return (
+      <div style={{ minHeight: 'calc(100vh - 52px)', background: K.pageBg }}>
+        <EmptyState title="No sources available" message="There are no sources with regulations yet." />
+      </div>
+    );
+  }
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -191,12 +202,12 @@ export function RegulationReviewTable() {
     navigate(`/sources/${s.id}`, { replace: true });
   };
 
-  const currentIdx = allSources.findIndex(s => s.id === selectedSource.id);
+  const currentIdx = allSources.findIndex(s => s.id === activeSource.id);
   const goTo = (idx: number) => { if (idx >= 0 && idx < allSources.length) handleSelectSource(allSources[idx]); };
 
   // Load fields from API
   const { data: fields, loading: fieldsLoading, error: fieldsError, reload } = useApi(
-    () => getFieldsForSource(selectedSource.id), [selectedSource.id],
+    () => getFieldsForSource(activeSource.id), [activeSource.id],
   );
 
   if (fieldsLoading) return <LoadingState message="Loading fields\u2026" />;
@@ -204,16 +215,16 @@ export function RegulationReviewTable() {
 
   const stats = getReviewStats(fields);
 
-  const doAccept   = async (id: number) => { await acceptField(selectedSource.id, id); reload(); };
-  const doReject   = async (id: number) => { await rejectField(selectedSource.id, id); reload(); };
-  const doFlag     = async (id: number) => { await flagField(selectedSource.id, id); reload(); };
-  const doReset    = async (id: number) => { await resetField(selectedSource.id, id); reload(); };
-  const doAcceptAll = async () => { await acceptAllFields(selectedSource.id); reload(); };
+  const doAccept   = async (id: number) => { await acceptField(activeSource.id, id); reload(); };
+  const doReject   = async (id: number) => { await rejectField(activeSource.id, id); reload(); };
+  const doFlag     = async (id: number) => { await flagField(activeSource.id, id); reload(); };
+  const doReset    = async (id: number) => { await resetField(activeSource.id, id); reload(); };
+  const doAcceptAll = async () => { await acceptAllFields(activeSource.id); reload(); };
 
   const startEdit = (row: ReviewableField) => { setEditingId(row.id); setEditValue(row.reviewedValue ?? row.extractedValue); };
-  const saveEdit  = async (id: number) => { await editFieldValue(selectedSource.id, id, editValue); setEditingId(null); reload(); };
+  const saveEdit  = async (id: number) => { await editFieldValue(activeSource.id, id, editValue); setEditingId(null); reload(); };
   const startComment = (row: ReviewableField) => { setCommentId(row.id); setCommentText(row.comment ?? ''); };
-  const saveComment = async (id: number) => { await addFieldComment(selectedSource.id, id, commentText); setCommentId(null); reload(); };
+  const saveComment = async (id: number) => { await addFieldComment(activeSource.id, id, commentText); setCommentId(null); reload(); };
 
   const visible = fields.filter(r => {
     const matchCat    = catFilter    === 'All'          || r.category === catFilter;
@@ -250,7 +261,7 @@ export function RegulationReviewTable() {
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button onClick={() => goTo(currentIdx - 1)} disabled={currentIdx === 0} style={{ padding: '7px 10px', borderRadius: '6px', border: `1px solid ${K.border}`, background: '#fff', color: currentIdx === 0 ? K.textFaint : K.textSecondary, cursor: currentIdx === 0 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', flexShrink: 0, fontFamily: 'inherit' }}><ChevronLeft size={14} /></button>
           <div style={{ flex: 1 }}>
-            <SourceSearch selected={selectedSource} onSelect={handleSelectSource} />
+            <SourceSearch selected={activeSource} onSelect={handleSelectSource} sources={allSources} />
           </div>
           <button onClick={() => goTo(currentIdx + 1)} disabled={currentIdx === allSources.length - 1} style={{ padding: '7px 10px', borderRadius: '6px', border: `1px solid ${K.border}`, background: '#fff', color: currentIdx === allSources.length - 1 ? K.textFaint : K.textSecondary, cursor: currentIdx === allSources.length - 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', flexShrink: 0, fontFamily: 'inherit' }}><ChevronRight size={14} /></button>
           <span style={{ fontSize: '11px', color: K.textFaint, flexShrink: 0, whiteSpace: 'nowrap' }}>{currentIdx + 1} / {allSources.length}</span>
@@ -285,7 +296,7 @@ export function RegulationReviewTable() {
           <button onClick={doAcceptAll} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#fff', border: `1px solid ${K.border}`, borderRadius: '6px', fontSize: '12px', fontWeight: 500, color: K.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
             <Check size={12} /> Accept All Pending
           </button>
-          <button onClick={() => navigate(`/regulations/${selectedSource.id}`)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 14px', background: K.accent, border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
+          <button onClick={() => navigate(`/regulations/${activeSource.id}`)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 14px', background: K.accent, border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
             <Send size={12} /> Detail View
           </button>
         </div>

@@ -18,6 +18,22 @@ def get_connection() -> sqlite3.Connection:
 def init_db() -> None:
     conn = get_connection()
     conn.executescript(SCHEMA)
+    # Migrate existing databases: add columns that may not exist yet
+    for col, ddl in [
+        ("external_url", "ALTER TABLE sources ADD COLUMN external_url TEXT"),
+        ("origin", "ALTER TABLE sources ADD COLUMN origin TEXT NOT NULL DEFAULT 'seed'"),
+    ]:
+        try:
+            conn.execute(ddl)
+        except Exception:
+            pass  # column already exists
+    for col, ddl in [
+        ("origin", "ALTER TABLE regulations ADD COLUMN origin TEXT NOT NULL DEFAULT 'seed'"),
+    ]:
+        try:
+            conn.execute(ddl)
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
@@ -37,7 +53,9 @@ CREATE TABLE IF NOT EXISTS sources (
     started_at            TEXT,
     completed_at          TEXT,
     failure_message       TEXT,
-    source_text           TEXT
+    source_text           TEXT,
+    external_url          TEXT,
+    origin                TEXT NOT NULL DEFAULT 'seed'
 );
 
 CREATE TABLE IF NOT EXISTS regulations (
@@ -50,7 +68,8 @@ CREATE TABLE IF NOT EXISTS regulations (
     summary               TEXT,
     status                TEXT NOT NULL DEFAULT 'Pending',
     created_at            TEXT NOT NULL,
-    updated_at            TEXT NOT NULL
+    updated_at            TEXT NOT NULL,
+    origin                TEXT NOT NULL DEFAULT 'seed'
 );
 
 CREATE TABLE IF NOT EXISTS regulation_fields (
@@ -90,6 +109,9 @@ CREATE TABLE IF NOT EXISTS review_decisions (
     created_at            TEXT NOT NULL
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_external_url ON sources(external_url) WHERE external_url IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sources_origin ON sources(origin);
+CREATE INDEX IF NOT EXISTS idx_regulations_origin ON regulations(origin);
 CREATE INDEX IF NOT EXISTS idx_regulations_source ON regulations(source_id);
 CREATE INDEX IF NOT EXISTS idx_fields_regulation ON regulation_fields(regulation_id);
 CREATE INDEX IF NOT EXISTS idx_fields_source ON regulation_fields(source_id);

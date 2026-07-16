@@ -1,6 +1,6 @@
 # Architecture -- Regulatory Intelligence PoC
 
-**Status:** Implemented (Sprint 5)
+**Status:** Implemented (Sprint 6)
 **Date:** 16 July 2026
 
 ---
@@ -186,7 +186,7 @@ Key principles:
 | Evidence linking       | Imported source text + line references     | Automated span extraction      |
 | Translation            | Imported translations where available      | Translation service            |
 
-The import service (`import_service.py`) reads Tamarind output files and creates database records. It does not invoke any AI model.
+The import service (`import_tamarind.py`) reads Tamarind output files (Excel) and creates database records. It does not invoke any AI model. It is invoked via CLI: `python -m backend.import_tamarind --input <path>`.
 
 ## 8. Development and Production-like Local Startup Flow
 

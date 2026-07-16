@@ -448,6 +448,91 @@ backend/
 
 ---
 
+### Sprint 6 -- Tamarind Output Ingestion
+
+**Date:** 16 July 2026
+
+**Status:** Completed
+
+**Objective**
+Import existing Tamarind extraction outputs into the FastAPI + SQLite application without rebuilding AI extraction.
+
+**Stage 1 -- Discovery and mapping**
+- Inspected 15+ files in the Tamarind archive (xlsx, docx)
+- Identified `Merit_Tamarind Intelligence_POC_Batch 1_Sample Data_v1.0_08Apr2025.xlsx` as the primary import source
+- 54 records across 5 jurisdictions: Poland (4), Denmark (9), UAE (15), Taiwan (13), South Korea (13)
+- Mapped 15 Tamarind columns to the existing sources/regulations/fields/evidence schema
+- Documented field format variations (structured dicts vs semicolon-delimited strings)
+- Created docs/TAMARIND_IMPORT_MAPPING.md with full field mapping and dedup rules
+
+**Stage 2 -- Import implementation**
+- Created `backend/import_tamarind.py` -- idempotent CLI importer
+- Supports `--dry-run`, `--reset-imported` flags
+- Each Tamarind record creates: 1 source, 1 regulation, 12 fields, 12 evidence records
+- Dedup by `external_url` (unique constraint on sources table)
+- Import key: URL of the source document
+- Origin tracking: `origin` column on sources and regulations ('seed' vs 'tamarind')
+- Parsers for mixed product/type formats (structured dicts and plain text)
+- Import summary with counts for created, skipped, errors
+- Error report written to `backend/data/import_errors.json`
+
+**Schema changes**
+- Added `external_url TEXT` and `origin TEXT DEFAULT 'seed'` to sources table
+- Added `origin TEXT DEFAULT 'seed'` to regulations table
+- Added migration logic for existing databases (ALTER TABLE with exception handling)
+- Added unique index on `sources(external_url)`
+
+**Frontend changes**
+- Review source catalogue (prev/next navigation, source selector) now fetched from API
+- Search filter dropdowns (jurisdictions, source titles) now derived from live data
+- Dashboard jurisdictions and alerts computed from actual database records
+- All components handle async source loading with loading states
+
+**Files added**
+- backend/import_tamarind.py
+- backend/tests/test_import.py (21 tests)
+- docs/TAMARIND_IMPORT_MAPPING.md
+
+**Files modified**
+- backend/database.py (schema: external_url, origin columns; migration logic)
+- backend/routers/dashboard.py (dynamic jurisdictions and alerts from DB)
+- backend/tests/test_api.py (flexible dashboard assertions)
+- src/services/regulations.ts (API-based review source catalogue)
+- src/services/search.ts (data-driven jurisdiction/source lists)
+- src/app/components/RegulationReview.tsx (async source loading)
+- src/app/components/RegulationReviewTable.tsx (async source loading)
+- src/app/components/SearchExport.tsx (data-driven filter dropdowns)
+- README.md, DEVELOPMENT_LOG.md, docs/SPRINT_PLAN.md, docs/DATA_MODEL.md
+
+**Validation performed**
+- Dry run: 54 records parsed, 0 errors
+- Import: 54 sources, 54 regulations, 648 fields, 648 evidence records created
+- Idempotent re-import: all 54 records skipped, 0 duplicates
+- Combined with seed data: 66 sources (12 seed + 54 tamarind), 60 regulations, 726 fields
+- 53 backend tests passing (32 existing + 21 new import tests)
+- Frontend build: succeeded, 292 KB JS, 87 KB CSS
+- Reviewer edits survive re-import (verified by test)
+
+**Decisions**
+- Import only Batch 1 data (54 records, 5 jurisdictions) -- the QC-validated deliverable
+- Albania and Moldova files deferred (different schema, not in Batch 1)
+- Denmark Structured Output (165 rows) deferred (overlaps with Batch 1, no URL for dedup)
+- Each Tamarind row produces 12 fields (mapped from its columns, not 13 like seed data which has separate Notice/Comment/Effective dates)
+- Evidence excerpts = the extracted value itself (Batch 1 has no separate evidence text)
+- Confidence scores assigned per field type from defaults (Batch 1 has relevance scores only in products/type fields)
+
+**Known limitations**
+- Batch 1 data has no original source text (source_text = NULL for imported records)
+- No separate date fields (notice, comment deadline, effective) -- dates are a single free-text field
+- Confidence scores are defaults per field type, not from extraction
+- Albania and Moldova data not imported (different schema)
+- Denmark Structured Output (165 rows) not imported (no URL column for dedup)
+
+**Next steps**
+- Sprint 7: Dashboard integration
+
+---
+
 ## Sprint Tracking Template
 
 ### Sprint X – Sprint Name

@@ -1,6 +1,6 @@
 # Data Model -- Regulatory Intelligence PoC
 
-**Status:** Implemented (Sprint 5)
+**Status:** Implemented (Sprint 6)
 **Date:** 16 July 2026
 
 ---
@@ -38,6 +38,8 @@ ExportJob (standalone, via POST /api/exports)
 | status           | string    | Processing status (see below)                    |
 | processing_stage | string    | Current pipeline stage (see below)               |
 | source_text      | text      | Full original document text (if available)       |
+| external_url     | text      | Original source URL (used for import dedup)      |
+| origin           | string    | Data origin: 'seed' (demo) or 'tamarind' (import)|
 | created_at       | timestamp | Record creation time                             |
 | updated_at       | timestamp | Last update time                                 |
 
@@ -67,6 +69,7 @@ ExportJob (standalone, via POST /api/exports)
 | effective_date   | date      | Expected or confirmed effective date             |
 | notice_date      | date      | Date the regulation was published/announced      |
 | comment_deadline | date      | Public comment deadline (if applicable)          |
+| origin           | string    | Data origin: 'seed' (demo) or 'tamarind' (import)|
 | created_at       | timestamp | Record creation time                             |
 | updated_at       | timestamp | Last update time                                 |
 

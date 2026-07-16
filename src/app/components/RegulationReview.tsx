@@ -8,7 +8,7 @@ import { K, statusStyle } from './kiaa-tokens';
 import { Badge } from './KBadge';
 import { LoadingState, ErrorState } from './StateViews';
 import {
-  getReviewSources, getReviewSourceById, getRegulationById, getHighlightRanges,
+  fetchReviewSources, getReviewSources, getReviewSourceById, getRegulationById, getHighlightRanges,
   acceptField, rejectField, flagField, resetField,
   editFieldValue, addFieldComment, acceptAllFields, getReviewStats,
   type RegulationResponse,
@@ -51,9 +51,12 @@ export function RegulationReview() {
   const { regulationId } = useParams<{ regulationId: string }>();
   const navigate = useNavigate();
 
-  const allSources = getReviewSources();
   const sourceId = Number(regulationId) || 0;
-  const source = getReviewSourceById(sourceId);
+
+  // Fetch review sources list from API
+  const { data: allSources, loading: sourcesLoading } = useApi(
+    () => fetchReviewSources(), [],
+  );
 
   const [activeFieldId, setActiveFieldId] = useState<number | null>(null);
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
@@ -62,7 +65,16 @@ export function RegulationReview() {
   const [commentText, setCommentText] = useState('');
   const [evidenceOpen, setEvidenceOpen] = useState(true);
 
-  if (!source) {
+  const { data: regulation, loading: regLoading, error: regError, reload } = useApi(
+    () => getRegulationById(sourceId), [sourceId],
+  );
+
+  if (sourcesLoading || regLoading) return <LoadingState message="Loading regulation\u2026" />;
+
+  const sourcesList = allSources ?? [];
+  const source = sourcesList.find(s => s.id === sourceId);
+
+  if (!source && !regulation) {
     return (
       <div style={{ minHeight: 'calc(100vh - 52px)', background: K.pageBg }}>
         <ErrorState
@@ -74,11 +86,6 @@ export function RegulationReview() {
     );
   }
 
-  const { data: regulation, loading: regLoading, error: regError, reload } = useApi(
-    () => getRegulationById(sourceId), [sourceId],
-  );
-
-  if (regLoading) return <LoadingState message="Loading regulation\u2026" />;
   if (regError || !regulation) return <ErrorState title="Failed to load regulation" message={regError ?? undefined} onRetry={reload} />;
 
   const fields = regulation.fields ?? [];
@@ -90,11 +97,11 @@ export function RegulationReview() {
   const highlightRanges = getHighlightRanges();
 
   // Prev/next navigation
-  const currentIdx = allSources.findIndex(s => s.id === sourceId);
+  const currentIdx = sourcesList.findIndex(s => s.id === sourceId);
   const hasPrev = currentIdx > 0;
-  const hasNext = currentIdx < allSources.length - 1;
-  const goPrev = () => { if (hasPrev) navigate(`/regulations/${allSources[currentIdx - 1].id}`); };
-  const goNext = () => { if (hasNext) navigate(`/regulations/${allSources[currentIdx + 1].id}`); };
+  const hasNext = currentIdx < sourcesList.length - 1;
+  const goPrev = () => { if (hasPrev) navigate(`/regulations/${sourcesList[currentIdx - 1].id}`); };
+  const goNext = () => { if (hasNext) navigate(`/regulations/${sourcesList[currentIdx + 1].id}`); };
 
   // Unsaved-change check
   const hasUnsavedEdit = editingFieldId !== null;

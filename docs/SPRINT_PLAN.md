@@ -176,22 +176,27 @@
 
 ## Sprint 6 -- Tamarind Output Ingestion
 
+**Status:** Completed
+
 **Objective:** Import existing Tamarind extraction outputs into the database.
 
 **Scope:**
-- Analyse Tamarind output format (JSON/CSV structure)
+- Analyse Tamarind output format (Excel structured outputs)
 - Create import service that reads Tamarind outputs and creates database records
 - Map Tamarind fields to the data model (Source, Regulation, RegulatoryField, Evidence)
-- Create import CLI command or API endpoint
-- Validate imported data against existing mock data
-- Handle edge cases: missing fields, confidence scores, multilingual text
+- Create import CLI command
+- Handle edge cases: mixed field formats, missing confidence scores, null sub-products
+- Idempotent import with dry-run mode
 
 **Acceptance criteria:**
-- Tamarind outputs are successfully imported into SQLite
+- Tamarind outputs are successfully imported into SQLite (54 records, 5 jurisdictions)
 - Imported records appear correctly in all screens
 - Evidence traceability is maintained (field -> evidence -> source text)
 - Import is idempotent (re-running does not create duplicates)
+- Reviewer edits survive re-import
+- Demo seed data remains distinguishable from imported data
 - Documentation updated with import instructions
+- 53 backend tests passing
 
 **Dependencies:** Sprint 5 complete, Tamarind output files available
 

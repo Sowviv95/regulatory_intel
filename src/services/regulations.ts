@@ -1,14 +1,31 @@
 import type { ReviewableField, ReviewSource, EvidenceEntry } from '../types';
 import { get, post } from './api';
-import { reviewSources } from '../data/regulations';
 
-// Review sources catalogue (static — used for source selector UI and prev/next)
+// Review sources catalogue — fetched from API (sources with regulations)
+let _reviewSourcesCache: ReviewSource[] | null = null;
+
+export async function fetchReviewSources(): Promise<ReviewSource[]> {
+  const res = await get<{ data: any[] }>('/api/sources');
+  const sources = res.data.filter((s: any) => s.regulationCount > 0);
+  _reviewSourcesCache = sources.map((s: any) => ({
+    id: s.id,
+    flag: s.flag,
+    country: s.country,
+    title: s.title,
+    sourceName: s.source,
+    docType: s.docType,
+    date: s.discovered,
+    fields: [],
+  }));
+  return _reviewSourcesCache;
+}
+
 export function getReviewSources(): ReviewSource[] {
-  return reviewSources;
+  return _reviewSourcesCache ?? [];
 }
 
 export function getReviewSourceById(id: number): ReviewSource | undefined {
-  return reviewSources.find(s => s.id === id);
+  return (_reviewSourcesCache ?? []).find(s => s.id === id);
 }
 
 // ---------------------------------------------------------------------------

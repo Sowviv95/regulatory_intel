@@ -61,20 +61,12 @@ export function downloadCsv(csv: string, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-export function getUniqueJurisdictions(): string[] {
-  return ['Taiwan', 'South Korea', 'Vietnam', 'Denmark', 'Finland', 'Poland'];
+export function getUniqueJurisdictions(records: SearchableRecord[]): string[] {
+  return [...new Set(records.map(r => r.jurisdiction))].sort();
 }
 
-export function getUniqueSourceTitles(): string[] {
-  // Static for now — these match the review sources
-  return [
-    'Tobacco Hazards Prevention Act \u2014 Amendment 2026',
-    'Electronic Cigarette Content Disclosure Rules Update',
-    'Nicotine Pouch Maximum Strength Regulation',
-    'Tobacco Control Law Phase 3 Implementation Decree',
-    'E-cigarette Point-of-Sale Display Restrictions',
-    'Heated Tobacco Product Labeling Requirements',
-  ];
+export function getUniqueSourceTitles(records: SearchableRecord[]): string[] {
+  return [...new Set(records.map(r => r.sourceTitle))].sort();
 }
 
 export function getSavedViews(): SavedView[] {

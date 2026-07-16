@@ -4,11 +4,11 @@ A proof-of-concept application for tracking, reviewing, and exporting tobacco an
 
 ## Current Status
 
-**Phase:** Sprint 5 -- FastAPI + SQLite persistence complete
+**Phase:** Sprint 6 -- Tamarind output ingestion complete
 **Frontend:** React + Vite SPA connected to backend API
 **Backend:** FastAPI + SQLite (local-first, no cloud dependencies)
 
-The UI was exported from [Figma Make](https://www.figma.com/design/Wh2ZFOMvruYZIRTRQhpG2V/Regulatory-Intelligence-Prototype) and has been stabilised for Windows ARM64 builds. All review actions, status changes, and comments now persist to SQLite.
+The UI was exported from [Figma Make](https://www.figma.com/design/Wh2ZFOMvruYZIRTRQhpG2V/Regulatory-Intelligence-Prototype) and has been stabilised for Windows ARM64 builds. All review actions, status changes, and comments persist to SQLite. Tamarind extraction outputs (54 records across 5 jurisdictions) are imported via an idempotent CLI importer.
 
 ## Technology Stack
 
@@ -50,17 +50,24 @@ pnpm run build
 # Run backend tests
 cd backend
 python -m pytest tests/ -v
+
+# Import Tamarind data
+python -m backend.import_tamarind --input "path/to/Batch1.xlsx"
+
+# Dry run (validate without writing)
+python -m backend.import_tamarind --input "path/to/Batch1.xlsx" --dry-run
+
+# Reset imported data and re-import
+python -m backend.import_tamarind --input "path/to/Batch1.xlsx" --reset-imported
 ```
 
 ## Current Limitations
 
-- All data is static/mock -- no persistence across page reloads
-- No URL-based routing (screen switching is state-driven)
-- No backend API
-- Export buttons show a confirmation toast but do not generate files
 - Settings, Publish, and Refresh buttons are non-functional placeholders
 - Single hardcoded user profile ("Jane Lee")
-- Dashboard KPIs are static values
+- Only the Taiwan demo source has full original source text
+- No authentication or multi-user support
+- SPA fallback needed for production server (deep link refresh)
 
 ## Documentation
 
@@ -71,6 +78,7 @@ python -m pytest tests/ -v
 | [Architecture](docs/ARCHITECTURE.md)              | Current and target architecture                |
 | [Data Model](docs/DATA_MODEL.md)                  | Conceptual entities and relationships          |
 | [API Contract](docs/API_CONTRACT.md)              | Proposed REST API endpoints (draft)            |
+| [Tamarind Import](docs/TAMARIND_IMPORT_MAPPING.md)| Tamarind file mapping and import rules         |
 | [Sprint Plan](docs/SPRINT_PLAN.md)                | Sprint 0-8 plan with acceptance criteria       |
 | [Demo Runbook](docs/DEMO_RUNBOOK.md)              | Demo journey and setup instructions            |
 | [Development Log](DEVELOPMENT_LOG.md)             | Change log and sprint tracking                 |
