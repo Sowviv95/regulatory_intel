@@ -43,6 +43,26 @@ export interface DashboardKpi {
   delta: string;
   up: boolean;
   sub: string;
+  nav?: string;
+}
+
+export interface DashboardStats {
+  totalSources: number;
+  newSources: number;
+  processingSources: number;
+  reviewSources: number;
+  irrelevantSources: number;
+  tamarindSources: number;
+  totalRegulations: number;
+  totalFields: number;
+  pendingFields: number;
+  acceptedFields: number;
+  rejectedFields: number;
+  flaggedFields: number;
+  lowConfidenceFields: number;
+  reviewRate: number;
+  evidenceCoverage: number;
+  fieldsWithEvidence: number;
 }
 
 export interface JurisdictionCoverage {
@@ -64,10 +84,31 @@ export interface DashboardAlert {
   status: string;
 }
 
+export interface RecentActivity {
+  decision: string;
+  createdAt: string;
+  fieldName: string;
+  sourceTitle: string;
+  country: string;
+  comment: string | null;
+}
+
+export interface OldestPending {
+  id: number;
+  flag: string;
+  country: string;
+  title: string;
+  discovered: string;
+  status: string;
+}
+
 export interface DashboardData {
   kpis: DashboardKpi[];
+  stats: DashboardStats;
   jurisdictions: JurisdictionCoverage[];
   alerts: DashboardAlert[];
+  recentActivity: RecentActivity[];
+  oldestPending: OldestPending[];
 }
 
 // -- Source ------------------------------------------------------------------

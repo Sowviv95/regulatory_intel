@@ -533,6 +533,67 @@ Import existing Tamarind extraction outputs into the FastAPI + SQLite applicatio
 
 ---
 
+### Sprint 7 -- Dashboard Integration
+
+**Date:** 16 July 2026
+
+**Status:** Completed
+
+**Objective**
+Make the Dashboard screen display real computed metrics from the database, including imported Tamarind records. All KPIs, jurisdiction breakdowns, review progress, and activity are derived from live data.
+
+**Changes implemented**
+- Rewrote GET /api/dashboard to compute all metrics from database queries
+- Dashboard response now includes: kpis (4 cards with nav paths), stats (16 counters), jurisdictions, alerts (recent sources), recentActivity (review decisions), oldestPending (queue ageing)
+- All metrics derived from live data: source counts by status, field counts by status, review rate, evidence coverage, low-confidence fields, Tamarind import counts
+- KPI cards navigate to filtered Source Queue or Search screen on click
+- Stats bar shows: Regulations, Accepted, Rejected, Flagged, Low Confidence, Evidence coverage -- each navigates to filtered Search
+- Jurisdiction rows navigate to country-filtered Source Queue
+- Queue Ageing panel shows oldest New/Ready for Review sources
+- Recent Review Activity panel shows latest review decisions
+- Refresh button reloads dashboard data
+- Source Queue reads URL params: ?status=X, ?country=X for dashboard-driven navigation
+- Search screen reads URL params: ?status=X, ?confidence=X for dashboard-driven navigation
+- Removed all static/hardcoded dashboard values
+- Empty database handled gracefully (zeros, empty lists)
+
+**Files added**
+- backend/tests/test_dashboard.py (14 tests)
+
+**Files modified**
+- backend/routers/dashboard.py (full rewrite)
+- backend/tests/test_api.py (updated dashboard assertion)
+- src/types/index.ts (DashboardStats, RecentActivity, OldestPending types; nav on KPI)
+- src/app/components/Dashboard.tsx (full rewrite with live data, navigation, stats bar)
+- src/app/components/SourceQueue.tsx (URL search params for initial filters)
+- src/app/components/SearchExport.tsx (URL search params for initial filters)
+
+**Validation performed**
+- 67 backend tests passing (32 API + 14 dashboard + 21 import)
+- `pnpm run build`: succeeded, 298 KB JS, 87 KB CSS
+- Dashboard metrics reconcile with Source Queue and Search counts
+- Card navigation applies correct filters
+- Empty database returns valid response with zeros
+
+**Decisions**
+- Single GET /api/dashboard endpoint serves all metrics (avoids multiple frontend calls)
+- KPI card nav paths use URL query params rather than React state
+- Recent activity limited to 10 most recent review decisions
+- Oldest pending limited to 5 items
+- Alerts show 10 most recent sources (by ID, newest first)
+- Evidence coverage = fields with evidence / total fields * 100
+
+**Known limitations**
+- Dashboard date display is not dynamically formatted (shows raw discovered date strings)
+- No real-time refresh (manual Refresh button only)
+- Filter dropdowns on dashboard header are decorative (not wired to backend filters)
+- Queue ageing uses source ID order as proxy for age (no explicit queue timestamp)
+
+**Next steps**
+- Sprint 8: Demo hardening
+
+---
+
 ## Sprint Tracking Template
 
 ### Sprint X – Sprint Name

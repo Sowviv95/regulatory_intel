@@ -206,22 +206,29 @@
 
 ## Sprint 7 -- Dashboard Integration
 
+**Status:** Completed
+
 **Objective:** Make the Dashboard screen display real computed metrics from the database.
 
 **Scope:**
-- Implement `/api/dashboard` endpoint with real aggregations
-- KPI cards show computed values (total regulations, new this week, high impact, pending review)
+- Rewrite GET /api/dashboard with comprehensive live metrics
+- KPI cards show computed values with navigation links
+- Stats bar with field-level review counts and evidence coverage
 - Jurisdiction coverage computed from actual source/regulation data
-- Recent alerts populated from actual recent regulations
-- Dashboard filters apply to real data
-- Refresh button triggers data reload
+- Recent sources populated from actual database records
+- Recent review activity from review_decisions table
+- Queue ageing showing oldest pending sources
+- Card navigation to filtered Source Queue and Search screens
+- URL query parameter support for dashboard-driven filters
+- Empty database handling
 
 **Acceptance criteria:**
-- Dashboard KPIs reflect actual database state
+- All dashboard values derived from live database state
 - Jurisdiction coverage percentages are correct
-- Recent alerts show the most recent high-priority regulations
-- Filters work correctly
-- Dashboard loads within 2 seconds
+- KPI and stats cards navigate to correctly filtered views
+- 67 backend tests passing (32 API + 14 dashboard + 21 import)
+- Frontend build succeeds
+- Empty database returns zeros, not errors
 
 **Dependencies:** Sprint 6 complete
 

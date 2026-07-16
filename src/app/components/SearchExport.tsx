@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import {
   Search, Bell, ChevronDown, ChevronUp, Check, X, BookmarkPlus,
   FileSpreadsheet, FileText, SlidersHorizontal, Star, Library,
@@ -197,13 +197,18 @@ function ExportSummary({ records, onClose, onConfirm }: { records: SearchableRec
 
 export function SearchExport() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Initialize filters from URL params (for dashboard navigation)
+  const initialStatus = searchParams.get('status') ?? undefined;
+  const initialConfidence = searchParams.get('confidence') ?? undefined;
 
   // Filters
   const [query, setQuery] = useState('');
   const [jurisdiction, setJurisdiction] = useState('All');
   const [category, setCategory] = useState('All');
-  const [status, setStatus] = useState('All');
-  const [confidence, setConfidence] = useState('All');
+  const [status, setStatus] = useState(initialStatus ?? 'All');
+  const [confidence, setConfidence] = useState(initialConfidence ?? 'All');
   const [source, setSource] = useState('All');
   const [sortBy, setSortBy] = useState<'jurisdiction' | 'fieldName' | 'confidence' | 'status' | 'date' | undefined>(undefined);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');

@@ -38,37 +38,34 @@ All endpoints return JSON. The base URL is `http://localhost:8000`.
 
 ### GET /api/dashboard
 
-**Purpose:** Return aggregated metrics for the dashboard screen.
+**Purpose:** Return comprehensive aggregated metrics for the dashboard screen. All values are computed from live database data.
 
 **Response:**
 ```json
 {
   "data": {
-    "total_regulations": 1243,
-    "new_this_week": 57,
-    "high_impact": 84,
-    "pending_review": 239,
-    "jurisdictions": [
-      {
-        "country": "Taiwan",
-        "country_code": "TW",
-        "flag_emoji": "...",
-        "total": 187,
-        "covered": 142,
-        "pending": 18,
-        "high_impact": 12
-      }
+    "kpis": [
+      { "label": "Total Sources", "value": "66", "delta": "54 imported", "up": true, "sub": "Across 8 jurisdictions", "nav": "/sources" }
     ],
-    "recent_alerts": [
-      {
-        "id": 1,
-        "flag_emoji": "...",
-        "country": "Taiwan",
-        "title": "Tobacco Hazards Prevention Act Amendment 2026",
-        "date": "2026-07-14",
-        "impact": "High",
-        "status": "New"
-      }
+    "stats": {
+      "totalSources": 66, "newSources": 4, "processingSources": 4,
+      "reviewSources": 3, "irrelevantSources": 1, "tamarindSources": 54,
+      "totalRegulations": 60, "totalFields": 726,
+      "pendingFields": 700, "acceptedFields": 10, "rejectedFields": 3, "flaggedFields": 5,
+      "lowConfidenceFields": 42, "reviewRate": 2.5, "evidenceCoverage": 100.0,
+      "fieldsWithEvidence": 726
+    },
+    "jurisdictions": [
+      { "country": "Taiwan", "flag": "...", "total": 14, "covered": 1, "pending": 13, "high": 5 }
+    ],
+    "alerts": [
+      { "id": 66, "flag": "...", "country": "Taiwan", "title": "...", "date": "Jul 16, 2026", "impact": "High", "status": "Ready for Review" }
+    ],
+    "recentActivity": [
+      { "decision": "Accepted", "createdAt": "Jul 16, 2026 10:00", "fieldName": "Title", "sourceTitle": "...", "country": "Taiwan", "comment": null }
+    ],
+    "oldestPending": [
+      { "id": 1, "flag": "...", "country": "Taiwan", "title": "...", "discovered": "Jul 14, 2026", "status": "New" }
     ]
   }
 }

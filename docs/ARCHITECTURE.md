@@ -1,6 +1,6 @@
 # Architecture -- Regulatory Intelligence PoC
 
-**Status:** Implemented (Sprint 6)
+**Status:** Implemented (Sprint 7)
 **Date:** 16 July 2026
 
 ---

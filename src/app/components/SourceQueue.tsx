@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import {
   Play, RotateCcw, EyeOff, ArrowRight, RefreshCw, Loader, CheckCircle, AlertCircle,
   Search, X, ChevronDown, ChevronUp, Eye, FileText, Clock, Hash,
@@ -155,11 +155,16 @@ function DetailPanel({ source, onClose }: { source: Source; onClose: () => void 
 
 export function SourceQueue() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Initialize filters from URL params (for dashboard navigation)
+  const initialStatus = (searchParams.get('status') as SourceStatus | null) ?? undefined;
+  const initialCountry = searchParams.get('country') ?? undefined;
 
   // Filters
-  const [activeTab, setActiveTab] = useState<SourceStatus | 'All'>('All');
+  const [activeTab, setActiveTab] = useState<SourceStatus | 'All'>(initialStatus ?? 'All');
   const [query, setQuery] = useState('');
-  const [countryFilter, setCountryFilter] = useState('All');
+  const [countryFilter, setCountryFilter] = useState(initialCountry ?? 'All');
   const [docTypeFilter, setDocTypeFilter] = useState('All');
   const [sortBy, setSortBy] = useState<'discovered' | 'country' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');

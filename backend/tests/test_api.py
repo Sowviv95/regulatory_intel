@@ -33,8 +33,10 @@ def test_dashboard():
     assert r.status_code == 200
     d = r.json()["data"]
     assert len(d["kpis"]) == 4
-    assert len(d["jurisdictions"]) >= 5  # dynamic from data
-    assert len(d["alerts"]) >= 6  # dynamic, up to 10
+    assert "stats" in d
+    assert d["stats"]["totalSources"] == 12
+    assert len(d["jurisdictions"]) >= 5
+    assert len(d["alerts"]) >= 6
 
 
 # -- Sources -----------------------------------------------------------------
