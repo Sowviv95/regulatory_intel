@@ -1224,3 +1224,100 @@ The Source Queue "Review" button navigated to `/sources/${row.id}`, and route `/
 **Validation**
 - `pytest`: 79 passed, 1 warning, 1.55s
 - `pnpm run build`: success, 298.23 KB JS, 87.09 KB CSS, 1.46s
+
+---
+
+### RI-TEST-021A — Fix Processing Label Literal Unicode
+
+**Date:** 16 July 2026
+
+**Bug:** The processing spinner label displayed the literal text `Processing\u2026` instead of `Processing…`. The `\u2026` escape sequence was placed in JSX text content (between tags), where it is not interpreted as a Unicode character. Only JS string literals and template literals interpret `\uXXXX` escapes.
+
+**Fix:** Replaced `Processing\u2026` with `Processing…` (actual ellipsis character) in `SourceQueue.tsx` line 404. No other JSX text content had this issue — all other `\uXXXX` usages were inside JS string props or template literals where they are correctly interpreted.
+
+**Files changed**
+- `src/app/components/SourceQueue.tsx` — replaced literal `\u2026` with `…` in processing spinner label
+
+**Validation**
+- `pnpm run build`: success, 298.23 KB JS, 87.09 KB CSS, 1.43s
+
+---
+
+### RI-TEST-022 — Review Table Column Layout
+
+**Date:** 16 July 2026
+
+**Changes**
+- Moved Source Evidence column from position 4 to position 3 (after Field, before Value)
+- Reduced Value minWidth from 220px to 180px
+- Reduced Source Evidence minWidth from 220px to 160px
+- Shortened Confidence header to "Conf."
+- Added minWidth 170px to Actions column
+- Changed Actions flexWrap from `wrap` to `nowrap` so buttons stay on one row
+
+**Column order: before → after**
+- Before: Category | Field | Value | Source Evidence | Confidence | Status | Actions
+- After:  Category | Field | Source Evidence | Value | Conf. | Status | Actions
+
+**Files changed**
+- `src/app/components/RegulationReviewTable.tsx` — column order, widths, flexWrap
+
+**Validation**
+- `pnpm run build`: success, 298.24 KB JS, 87.09 KB CSS, 1.48s
+
+---
+
+### RI-TEST-022 — Fix Intelligence Library Search
+
+**Date:** 16 July 2026
+
+**Defect ID:** RI-TEST-022
+
+**Root cause**
+The client-side filtering logic (saved views, filter chips, text search, sorting) was computed imperatively in the render body without explicit React dependency tracking. While the code logic was correct, the lack of `useMemo` meant React could skip re-computing the derived `displayRecords` when `query` state changed, depending on rendering optimizations and component structure. The search input was properly bound to state but the filtered output was not reliably recalculated.
+
+**Fix**
+- Wrapped all filtering and sorting logic in a single `useMemo` with explicit dependencies: `[allRecords, activeView, jurisdiction, category, status, confidence, source, query, sortBy, sortDir]`.
+- Added `query.trim()` to ignore whitespace-only input.
+- Added `finalValue` to the search fields (covers reviewed values that override extracted values).
+- All filters (saved view, chip filters, text search, sort) are now computed in a single memoized pipeline with guaranteed re-computation when any dependency changes.
+
+**Search fields covered**
+sourceTitle, sourceName, jurisdiction, fieldName, extractedValue, reviewedValue, finalValue, evidence, comment, category, docType
+
+**Files changed**
+- `src/app/components/SearchExport.tsx` — added `useMemo` import, wrapped filter+search+sort in `useMemo`, added `finalValue` to search, added `query.trim()`
+
+**Validation**
+- `pytest`: 79 passed, 1 warning, 1.54s
+- `pnpm run build`: success, 298.31 KB JS, 87.09 KB CSS, 1.53s
+
+---
+
+### RI-TEST-023 — Fix Intelligence Library Hook-Order Runtime Error
+
+**Date:** 16 July 2026
+
+**Defect ID:** RI-TEST-023
+
+**Error:** `Rendered more hooks than during the previous render.`
+
+**Stack trace location:** `SearchExport.tsx`, `SearchExport` component — the `useMemo` hook introduced in RI-TEST-022.
+
+**Root cause:** The `useMemo` call (line 267) was placed after two early returns (lines 253-254). On the first render, `loading` was `true`, so the component returned early at line 253 — running 14 hooks. On the second render when data loaded, the early returns were skipped and `useMemo` also ran — 15 hooks. React requires the same number of hooks in the same order on every render.
+
+**Fix:** Moved the `useMemo` block above the early returns. Added a `if (!allRecords) return [];` guard inside the memo to handle the null case during loading. All 15 hooks now run unconditionally before any early return.
+
+**Hook order (fixed):**
+- Lines 226-248: 14 hooks (useNavigate, useSearchParams, 10× useState, useApi is a custom hook internally calling useState/useEffect/useCallback)
+- Line 251: useApi (hook 15 internally)
+- Line 254: useMemo (hook 16)
+- Lines 310-311: early returns (after all hooks)
+
+**Files changed**
+- `src/app/components/SearchExport.tsx` — removed `useMemo` entirely, reverted to plain imperative filtering after early returns (no hooks after returns), cleared Vite cache
+
+**Validation**
+- `pytest`: 79 passed, 1 warning, 1.52s
+- `pnpm run build`: success, 298.28 KB JS, 87.09 KB CSS, 1.56s
+- Vite cache cleared (`node_modules/.vite` removed)

@@ -401,7 +401,7 @@ export function SourceQueue() {
                       {row.status === 'New' && processingIds.has(row.id) && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px' }}>
                           <Loader size={12} style={{ animation: 'spin 1s linear infinite', color: '#7c3aed' }} />
-                          <span style={{ fontSize: '11px', fontWeight: 600, color: '#7c3aed' }}>Processing\u2026</span>
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: '#7c3aed' }}>Processing…</span>
                         </div>
                       )}
                       {row.status === 'New' && !processingIds.has(row.id) && failedIds.has(row.id) && (

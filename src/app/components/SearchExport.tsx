@@ -263,11 +263,10 @@ export function SearchExport() {
     count: allRecords.filter(v.match).length,
   }));
 
-  // Apply saved-view filter first, then apply filter-chip filters on top
+  // Apply saved-view filter first, then filter-chip filters, then text search
   const activeViewDef = VIEW_DEFINITIONS.find(v => v.id === activeView);
-  let filtered = activeViewDef ? allRecords.filter(activeViewDef.match) : allRecords;
+  let filtered: SearchableRecord[] = activeViewDef ? allRecords.filter(activeViewDef.match) : [...allRecords];
 
-  // Apply filter chips (AND logic between filters)
   if (jurisdiction !== 'All') filtered = filtered.filter(r => r.jurisdiction === jurisdiction);
   if (category !== 'All') filtered = filtered.filter(r => r.category === category);
   if (status !== 'All') filtered = filtered.filter(r => r.status === status);
@@ -278,9 +277,8 @@ export function SearchExport() {
   }
   if (source !== 'All') filtered = filtered.filter(r => r.sourceTitle === source);
 
-  // Apply text search (match against multiple fields)
-  if (query) {
-    const q = query.toLowerCase();
+  if (query.trim()) {
+    const q = query.trim().toLowerCase();
     filtered = filtered.filter(r =>
       r.sourceTitle.toLowerCase().includes(q) ||
       r.sourceName.toLowerCase().includes(q) ||
@@ -291,15 +289,15 @@ export function SearchExport() {
       r.evidence.toLowerCase().includes(q) ||
       (r.comment && r.comment.toLowerCase().includes(q)) ||
       r.category.toLowerCase().includes(q) ||
-      r.docType.toLowerCase().includes(q)
+      r.docType.toLowerCase().includes(q) ||
+      r.finalValue.toLowerCase().includes(q)
     );
   }
 
   // Client-side sort
-  let sorted = filtered;
   if (sortBy) {
     const dir = sortDir === 'desc' ? -1 : 1;
-    sorted = [...filtered].sort((a, b) => {
+    filtered = [...filtered].sort((a, b) => {
       let av: string | number, bv: string | number;
       switch (sortBy) {
         case 'confidence': av = a.confidence; bv = b.confidence; break;
@@ -312,7 +310,7 @@ export function SearchExport() {
       return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
     });
   }
-  const displayRecords = sorted;
+  const displayRecords = filtered;
 
   // Selection uses composite key sourceId:fieldId
   const recordKey = (r: SearchableRecord) => `${r.sourceId}:${r.fieldId}`;

@@ -313,11 +313,11 @@ export function RegulationReviewTable() {
             <tr>
               <th style={thStyle}>Category</th>
               <th style={thStyle}>Field</th>
-              <th style={{ ...thStyle, minWidth: '220px' }}>Value</th>
-              <th style={{ ...thStyle, minWidth: '220px' }}>Source Evidence</th>
-              <th style={thStyle}>Confidence</th>
+              <th style={{ ...thStyle, minWidth: '160px' }}>Source Evidence</th>
+              <th style={{ ...thStyle, minWidth: '180px' }}>Value</th>
+              <th style={thStyle}>Conf.</th>
               <th style={thStyle}>Status</th>
-              <th style={{ ...thStyle, textAlign: 'center' }}>Actions</th>
+              <th style={{ ...thStyle, textAlign: 'center', minWidth: '170px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -334,6 +334,9 @@ export function RegulationReviewTable() {
                 >
                   <td style={tdStyle}><CategoryBadge cat={row.category} /></td>
                   <td style={{ ...tdStyle, fontWeight: 500, color: K.textPrimary, whiteSpace: 'nowrap' }}>{row.field}</td>
+                  <td style={{ ...tdStyle, color: K.textFaint, fontSize: '11px', lineHeight: 1.5 }}>
+                    <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{row.evidence}</span>
+                  </td>
                   <td style={tdStyle}>
                     {isEditing ? (
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -361,13 +364,10 @@ export function RegulationReviewTable() {
                       </div>
                     )}
                   </td>
-                  <td style={{ ...tdStyle, color: K.textFaint, fontSize: '11px', lineHeight: 1.5 }}>
-                    <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{row.evidence}</span>
-                  </td>
                   <td style={tdStyle}><ConfidenceDot pct={row.confidence} /></td>
                   <td style={tdStyle}><StatusChip status={row.status} /></td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'nowrap' }}>
                       {row.status !== 'Accepted' && (
                         <button onClick={() => doAccept(row.id)} title="Accept" style={{ width: '26px', height: '26px', borderRadius: '5px', border: '1px solid rgba(22,163,74,0.25)', background: 'rgba(22,163,74,0.08)', color: K.accent, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={12} /></button>
                       )}
